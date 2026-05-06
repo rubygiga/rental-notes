@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏠 租屋筆記</title>
+<!-- 引入 Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F7F5F0;--surface:#fff;--surface2:#F1EFE8;--surface3:#E8E6DE;
+  --border:#D3D1C7;--border2:#B4B2A9;
+  --text:#2C2C2A;--text2:#5F5E5A;--text3:#888780;
+  --accent:#3C3489;--accent-bg:#EEEDFE;--accent-text:#26215C;
+  --success:#0F6E56;--success-bg:#E1F5EE;--success-text:#04342C;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;--danger-text:#501313;
+  --warning:#854F0B;--warning-bg:#FAEEDA;--warning-text:#412402;
+  --r:10px;--rl:16px;
+}
+body{font-family:'PingFang TC','Microsoft JhengHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+h2{font-size:18px;font-weight:500}h3{font-size:15px;font-weight:500}
+/* nav */
+.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;position:sticky;top:0;z-index:100}
+.nb{font-size:18px;font-weight:500;padding:1rem 0;margin-right:auto}
+.nt{padding:.85rem .9rem;font-size:14px;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:2.5px solid transparent;transition:all .15s;font-family:inherit;white-space:nowrap}
+.nt:hover{color:var(--text)}.nt.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:500}
+/* pages */
+.page{display:none;padding:1.5rem}.page.active{display:block}
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);border:.5px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--surface2)}.btn:active{transform:scale(.98)}
+.btn-p{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-p:hover{background:#2c257a}
+.btn-d{background:var(--danger-bg);color:var(--danger);border-color:var(--danger)}.btn-d:hover{background:#f7c1c1}
+.btn-sm{padding:4px 10px;font-size:12px}.btn-ic{padding:5px 9px;min-width:32px;justify-content:center}
+/* inputs */
+input[type=text],input[type=number],input[type=date],textarea,select{font-family:inherit;font-size:14px;color:var(--text);background:var(--surface);border:.5px solid var(--border);border-radius:var(--r);padding:7px 10px;width:100%;outline:none;transition:border-color .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+label{font-size:13px;color:var(--text2);display:block;margin-bottom:4px}
+.field{margin-bottom:1rem}.field:last-child{margin-bottom:0}
+.row{display:flex;gap:10px}.row>.field{flex:1;min-width:0}
+/* score badge */
+.sb{display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:28px;border-radius:20px;font-size:13px;font-weight:500;padding:0 10px;flex-shrink:0}
+.sh{background:var(--success-bg);color:var(--success-text)}.sm{background:var(--warning-bg);color:var(--warning-text)}
+.sl{background:var(--danger-bg);color:var(--danger-text)}.sn{background:#f7c1c1;color:var(--danger-text)}
+/* prop cards */
+.prop-list{display:grid;gap:12px}
+.prop-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);padding:1.25rem;transition:border-color .15s}
+.prop-card:hover{border-color:var(--border2)}
+.pc-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.pc-meta{font-size:12px;color:var(--text3);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.pc-act{display:flex;gap:6px;margin-top:.75rem}
+/* form tabs */
+.stabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:1rem}
+.stab{padding:5px 12px;border-radius:20px;font-size:13px;border:.5px solid var(--border);background:var(--surface);cursor:pointer;transition:all .15s;font-family:inherit;color:var(--text2)}
+.stab:hover{background:var(--surface2)}.stab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);font-weight:500}
+.section{display:none}.section.active{display:block}
+/* radio opts */
+.oi{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--r);margin-bottom:6px;cursor:pointer;transition:background .1s}
+.oi:last-child{margin-bottom:0}.oi:hover{background:#e8e6df}
+.oi input[type=radio]{accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;cursor:pointer}
+.oi-label{flex:1;font-size:13px}
+.oi-s{font-size:11px;font-weight:500;padding:2px 8px;border-radius:10px;flex-shrink:0;white-space:nowrap}
+.sp{background:var(--accent-bg);color:var(--accent)}.sn2{background:var(--danger-bg);color:var(--danger)}
+.sz{background:var(--surface2);color:var(--text3);border:.5px solid var(--border)}.ss{background:#fffbe6;color:#7a5a00;border:.5px solid #e0cc80}
+/* chips */
+.chip-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;font-size:12px;border:.5px solid var(--border);cursor:pointer;user-select:none;transition:all .15s;background:var(--surface)}
+.chip:hover{background:var(--surface2)}.chip.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}.chip input{display:none}
+/* toggle switch */
+.tog-row{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;padding:3px 0;user-select:none}
+.tog{width:34px;height:20px;background:var(--border2);border-radius:10px;position:relative;transition:background .2s;flex-shrink:0}
+.tog.on{background:var(--accent)}.tog::after{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:left .2s}
+.tog.on::after{left:17px}input.tv{display:none}
+.note-box{background:var(--surface2);border-left:3px solid var(--border2);padding:7px 10px;border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--text2);margin-top:6px}
+/* photos */
+.pua{border:1.5px dashed var(--border2);border-radius:var(--r);padding:.85rem;text-align:center;color:var(--text3);font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px}
+.pua:hover{border-color:var(--accent);color:var(--accent)}
+.pgrid{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.pwrap{position:relative;width:82px;height:82px;flex-shrink:0}
+.pthumb{width:100%;height:100%;object-fit:cover;border-radius:8px;border:.5px solid var(--border);display:block}
+.pdel{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:var(--danger);color:#fff;border:2px solid #fff;border-radius:50%;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+/* compare */
+.cmp-sel{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem}
+.cpill{padding:6px 13px;border-radius:20px;font-size:13px;border:.5px solid var(--border);background:var(--surface);cursor:pointer;transition:all .15s}
+.cpill:hover{background:var(--surface2)}.cpill.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.ctbl{width:100%;border-collapse:collapse}.ctbl td{padding:8px;font-size:13px;border-top:.5px solid var(--border);vertical-align:top}
+.ctbl td:first-child{font-size:12px;color:var(--text3);width:110px;white-space:nowrap}
+.cwin{background:var(--success-bg);color:var(--success-text);border-radius:4px;display:inline-block;padding:0 5px}
+/* ranking */
+.rank-list{display:flex;flex-direction:column;gap:8px}
+.ri{display:flex;align-items:center;gap:12px;padding:1rem;background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);cursor:pointer;transition:all .15s}
+.ri:hover{border-color:var(--border2)}.rn{font-size:22px;min-width:32px;text-align:center}
+.rinfo{flex:1;min-width:0}.rsub{font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* modal */
+.moverlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem}
+.moverlay.hidden{display:none}
+.modal{background:var(--surface);border-radius:var(--rl);padding:1.5rem;max-width:580px;width:100%;max-height:90vh;overflow-y:auto}
+.mhdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+/* divider / utils */
+.divider{height:.5px;background:var(--border);margin:1rem 0}
+.mt1{margin-top:6px}.mt2{margin-top:12px}.mt3{margin-top:1rem}
+.mb1{margin-bottom:6px}.mb2{margin-bottom:12px}
+.tmuted{color:var(--text3);font-size:13px}.flex{display:flex;align-items:center;gap:8px}
+.fbet{display:flex;align-items:center;justify-content:space-between}.hidden{display:none!important}
+.sprev{background:var(--accent-bg);border-radius:var(--r);padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ═══════════ SETTINGS ═══════════ */
+.stg-layout{display:grid;grid-template-columns:160px 1fr;gap:1rem;align-items:start}
+@media(max-width:620px){.stg-layout{grid-template-columns:1fr}}
+.stg-nav{background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);overflow:hidden;position:sticky;top:72px}
+.stg-ni{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:.5px solid var(--border);transition:background .1s;user-select:none;color:var(--text2)}
+.stg-ni:last-child{border-bottom:none}.stg-ni:hover{background:var(--surface2)}
+.stg-ni.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
+.stg-panel{display:none}.stg-panel.active{display:block}
+
+/* criterion row — the numbered list item */
+.crit-row{background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);margin-bottom:10px;overflow:hidden;transition:border-color .15s}
+.crit-row:hover{border-color:var(--border2)}
+.crit-row-hdr{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:default}
+.crit-num{font-size:12px;font-weight:600;color:var(--text3);min-width:20px}
+.crit-title{flex:1;font-size:14px;font-weight:500;color:var(--text);min-width:0}
+.crit-title-input{flex:1;font-size:14px;font-weight:500;border:none;background:transparent;padding:0;outline:none;color:var(--text);min-width:0}
+.crit-title-input:focus{border-bottom:1.5px solid var(--accent)}
+.crit-badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--text3);border:.5px solid var(--border);white-space:nowrap;flex-shrink:0}
+.crit-body{padding:0 12px 12px 12px;border-top:.5px solid var(--border)}
+
+/* option editing rows */
+.oe-row{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:.5px solid var(--border)}
+.oe-row:last-child{border-bottom:none}
+.move-up-btn{width:26px;height:26px;border-radius:6px;border:.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:11px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;padding:0;line-height:1}
+.move-up-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.move-up-btn:active{transform:scale(.92)}
+
+/* toggle sub-item inside a criterion */
+.sub-tog{background:var(--surface2);border-radius:var(--r);padding:8px 10px;margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sub-tog-name{font-size:12px;font-weight:500;color:var(--text2);min-width:80px}
+.sub-tog input[type=number]{width:70px}
+
+/* photo cat rows */
+.pc-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.pc-row input{flex:1}.pc-row.drag-over{background:var(--accent-bg);border-radius:6px;padding:4px}
+
+/* inline confirm / dialog */
+.imodal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:center;justify-content:center;padding:1rem}
+.imodal-box{background:#fff;border-radius:var(--rl);padding:1.5rem;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+
+@media(max-width:560px){.nt{padding:.75rem .55rem;font-size:12px}.page{padding:1rem}.modal{padding:1rem}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nb">🏠 租屋筆記</div>
+  <button class="nt active" onclick="switchPage('list')">物件</button>
+  <button class="nt" onclick="switchPage('ranking')">排名</button>
+  <button class="nt" onclick="switchPage('compare')">比對</button>
+  <button class="nt" onclick="switchPage('settings')">設定</button>
+</nav>
+
+<!-- LIST -->
+<div class="page active" id="page-list">
+  <div class="fbet mb2"><h2>我的物件</h2><button class="btn btn-p" onclick="openNew()">＋ 新增物件</button></div>
+  <div class="prop-list" id="prop-list"></div>
+  <div id="prop-empty" class="hidden" style="text-align:center;padding:3rem 1rem;color:var(--text3)"><div style="font-size:48px;margin-bottom:12px">🏡</div><p>還沒有任何物件，點擊「新增物件」開始記錄</p></div>
+</div>
+
+<!-- RANKING -->
+<div class="page" id="page-ranking">
+  <h2 class="mb2">分數排名</h2>
+  <div class="rank-list" id="rank-list"></div>
+  <div id="rank-empty" class="hidden" style="text-align:center;padding:3rem;color:var(--text3)">尚無物件資料</div>
+</div>
+
+<!-- COMPARE -->
+<div class="page" id="page-compare">
+  <h2 style="margin-bottom:4px">比對物件</h2>
+  <p class="tmuted mb2">選擇 2 個物件進行比較</p>
+  <div class="cmp-sel" id="cmp-sel"></div>
+  <div id="cmp-result"></div>
+</div>
+
+<!-- SETTINGS -->
+<div class="page" id="page-settings">
+  <div class="fbet mb2"><h2>評分設定</h2><span class="tmuted" style="font-size:12px">▲ 按鈕可調整順序</span></div>
+  <div class="stg-layout">
+    <div class="stg-nav" id="stg-nav">
+      <div class="stg-ni active" onclick="switchStgTab('basic')">📋 基本資訊</div>
+      <div class="stg-ni" onclick="switchStgTab('cost')">💰 費用</div>
+      <div class="stg-ni" onclick="switchStgTab('env')">🔍 現場環境</div>
+      <div class="stg-ni" onclick="switchStgTab('safety')">🛡 安全機能</div>
+      <div class="stg-ni" onclick="switchStgTab('photos')">📷 照片</div>
+      <div class="stg-ni" onclick="switchStgTab('other')">⚙️ 其他</div>
+    </div>
+    <div>
+      <div class="stg-panel active" id="sp-basic"><div id="sl-basic"></div><button class="btn btn-sm mt2" onclick="openAddCrit('basic')">＋ 新增自訂評分項目</button></div>
+      <div class="stg-panel" id="sp-cost"><div id="sl-cost"></div><button class="btn btn-sm mt2" onclick="openAddCrit('cost')">＋ 新增自訂評分項目</button></div>
+      <div class="stg-panel" id="sp-env"><div id="sl-env"></div><button class="btn btn-sm mt2" onclick="openAddCrit('env')">＋ 新增自訂評分項目</button></div>
+      <div class="stg-panel" id="sp-safety"><div id="sl-safety"></div><button class="btn btn-sm mt2" onclick="openAddCrit('safety')">＋ 新增自訂評分項目</button></div>
+      <div class="stg-panel" id="sp-photos">
+        <div style="background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);padding:1rem">
+          <div class="fbet mb2"><h3>照片類別</h3><button class="btn btn-sm" onclick="addPhotoCat()">＋ 新增</button></div>
+          <p class="tmuted mb2" style="font-size:12px">可拖曳排序、編輯名稱、刪除</p>
+          <div id="pc-editor"></div>
+        </div>
+      </div>
+      <div class="stg-panel" id="sp-other">
+        <div id="sl-other"></div>
+        <button class="btn btn-sm mt2" onclick="openAddCrit('other')">＋ 新增自訂評分項目</button>
+        <div style="background:var(--danger-bg);border:.5px solid var(--danger);border-radius:var(--rl);padding:1rem;margin-top:1rem">
+          <h3 style="color:var(--danger-text);margin-bottom:.4rem">⚠️ 資料重置</h3>
+          <p style="font-size:13px;color:var(--danger-text);margin-bottom:.75rem">將評分設定恢復為預設值（不影響已儲存物件）</p>
+          <button class="btn btn-sm btn-d" onclick="openResetConfirm()">恢復預設設定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FORM MODAL -->
+<div class="moverlay hidden" id="prop-modal">
+  <div class="modal">
+    <div class="mhdr"><h2 id="modal-title">新增物件</h2><button class="btn btn-sm btn-ic" onclick="closeModal()">✕</button></div>
+    <div class="stabs">
+      <button class="stab active" onclick="switchSec('basic')">基本資訊</button>
+      <button class="stab" onclick="switchSec('cost')">費用</button>
+      <button class="stab" onclick="switchSec('env')">現場環境</button>
+      <button class="stab" onclick="switchSec('safety')">安全機能</button>
+      <button class="stab" onclick="switchSec('photos')">照片</button>
+      <button class="stab" onclick="switchSec('notes')">備忘</button>
+    </div>
+    <!-- BASIC -->
+    <div class="section active" id="sec-basic">
+      <div class="field"><label>看房日期</label><input type="date" id="f-date"></div>
+      <div class="field"><label>物件地址</label><input type="text" id="f-addr" placeholder="台北市…"></div>
+      <h3 class="mt2 mb1">🚇 離捷運站距離</h3>
+      <div id="opts-metro"></div>
+      <div class="row mt2">
+        <div class="field"><label>捷運站名</label><input type="text" id="f-metro-name" placeholder="板橋站"></div>
+        <div class="field"><label>步行分鐘</label><input type="number" id="f-metro-min" min="0" max="120" placeholder="8" oninput="nn(this,0,120);calcScore()"></div>
+      </div>
+      <h3 class="mt3 mb1">🏠 格局配置</h3>
+      <div class="row">
+        <div class="field"><label>房</label><input type="number" id="f-rooms" min="0" max="20" placeholder="1" oninput="nn(this,0,20);calcScore()"></div>
+        <div class="field"><label>廳</label><input type="number" id="f-living" min="0" max="10" placeholder="1" oninput="nn(this,0,10);calcScore()"></div>
+        <div class="field"><label>衛</label><input type="number" id="f-bath" min="0" max="10" placeholder="1" oninput="nn(this,0,10);calcScore()"></div>
+        <div class="field"><label>陽台</label><input type="number" id="f-balcony" min="0" max="10" placeholder="1" oninput="nn(this,0,10);calcScore()"></div>
+      </div>
+      <h3 class="mt3 mb1">🏢 樓層</h3>
+      <div class="row">
+        <div class="field"><label>所在樓層</label><input type="number" id="f-floor" min="1" max="100" placeholder="3" oninput="nn(this,1,100);calcScore()"></div>
+        <div class="field"><label>總樓層</label><input type="number" id="f-total-floor" min="1" max="100" placeholder="6" oninput="nn(this,1,100)"></div>
+      </div>
+      <div id="opts-floor" class="mt2"></div>
+      <!-- toggle sub-items for floor rendered dynamically -->
+      <div id="form-floor-subs"></div>
+      <div id="form-basic-custom"></div>
+    </div>
+    <!-- COST -->
+    <div class="section" id="sec-cost">
+      <div class="row">
+        <div class="field"><label>租金（元/月）</label><input type="number" id="f-rent" min="0" placeholder="20000" oninput="nn(this,0,999999);calcScore()"></div>
+        <div class="field"><label>押金（元）</label><input type="number" id="f-deposit" min="0" placeholder="40000"></div>
+      </div>
+      <div id="rent-hint" class="tmuted mt1" style="font-size:12px"></div>
+      <div class="field mt2">
+        <label style="font-weight:500;color:var(--text)">✅ 提供設備</label>
+        <div class="chip-group" id="chips-eq">
+          <label class="chip"><input type="checkbox" value="冰箱">冰箱</label>
+          <label class="chip"><input type="checkbox" value="洗衣機">洗衣機</label>
+          <label class="chip"><input type="checkbox" value="電視">電視</label>
+          <label class="chip"><input type="checkbox" value="冷氣">冷氣</label>
+          <label class="chip"><input type="checkbox" value="熱水器">熱水器</label>
+          <label class="chip"><input type="checkbox" value="床">床</label>
+          <label class="chip"><input type="checkbox" value="衣櫃">衣櫃</label>
+          <label class="chip"><input type="checkbox" value="第四台">第四台</label>
+          <label class="chip"><input type="checkbox" value="網路">網路</label>
+          <label class="chip"><input type="checkbox" value="天然瓦斯">天然瓦斯</label>
+          <label class="chip"><input type="checkbox" value="沙發">沙發</label>
+          <label class="chip"><input type="checkbox" value="桌椅">桌椅</label>
+        </div>
+      </div>
+      <div class="field">
+        <label style="font-weight:500;color:var(--text)">❌ 租金不包含</label>
+        <div class="chip-group" id="chips-ex">
+          <label class="chip"><input type="checkbox" value="管理費" onchange="toggleMgmt()">管理費</label>
+          <label class="chip"><input type="checkbox" value="水費">水費</label>
+          <label class="chip"><input type="checkbox" value="網路">網路</label>
+          <label class="chip"><input type="checkbox" value="垃圾處理">垃圾處理</label>
+          <label class="chip"><input type="checkbox" value="第四台">第四台</label>
+        </div>
+        <div id="mgmt-row" class="hidden mt1"><input type="number" id="f-mgmt" min="0" placeholder="管理費（元/月）"></div>
+      </div>
+      <div class="divider"></div>
+      <h3 class="mb1">⚡ 電費</h3><div id="opts-electric"></div>
+      <div class="mt1"><div class="tog-row" onclick="togH('f-summer')"><div id="f-summer-tog" class="tog"></div>夏季加價（+0分）</div><input type="hidden" id="f-summer" class="tv" value="0"></div>
+      <div class="field mt2"><label>每度電費（元）</label><input type="number" id="f-kwh" min="0" max="50" step="0.1" placeholder="4.5"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">💧 水費</h3><div id="opts-water"></div>
+      <div class="field mt2"><label>自行評分（0–5分）</label><input type="number" id="f-water-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">🔧 退租與維修</h3>
+      <div class="field"><label>提前解約賠償（個月）</label><input type="number" id="f-early-exit" min="0" max="12" placeholder="1"></div>
+      <div id="opts-repair"></div>
+      <div class="field mt2"><label>維修自行評分（0–5分）</label><input type="number" id="f-repair-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><textarea id="f-repair-note" rows="2" placeholder="房東負責…"></textarea></div>
+      <div id="form-cost-custom"></div>
+    </div>
+    <!-- ENV -->
+    <div class="section" id="sec-env">
+      <h3 class="mb1">🫁 氣味與濕氣</h3>
+      <div class="field"><label>家具霉味評分（0–5分）</label><input type="number" id="f-mold-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-mold-note" placeholder="備註…"></div>
+      <div class="field"><label>廁所通風評分（0–5分）</label><input type="number" id="f-toilet-vent-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-toilet-vent-note" placeholder="備註…"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">🔌 插座</h3>
+      <div class="row">
+        <div class="field"><label>房間</label><input type="number" id="f-outlet-room" min="0" max="50" placeholder="4" oninput="nn(this,0,50)"></div>
+        <div class="field"><label>廳</label><input type="number" id="f-outlet-living" min="0" max="50" placeholder="2" oninput="nn(this,0,50)"></div>
+        <div class="field"><label>衛</label><input type="number" id="f-outlet-bath" min="0" max="50" placeholder="1" oninput="nn(this,0,50)"></div>
+      </div>
+      <div class="field"><label>插座評分（0–5分）</label><input type="number" id="f-outlet-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-outlet-note" placeholder="備註…"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">📦 收納</h3>
+      <div class="field"><label>衣櫃數量</label><input type="number" id="f-storage-count" min="0" max="20" placeholder="2" oninput="nn(this,0,20)"></div>
+      <div class="field"><label>收納評分（0–5分）</label><input type="number" id="f-storage-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-storage-note" placeholder="備註…"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">👕 洗衣機</h3>
+      <div id="opts-washer"></div>
+      <div id="washer-self" class="hidden mt1">
+        <div class="field"><label>個人洗衣機評分（0–5分）</label><input type="number" id="f-washer-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+        <div class="field"><label>備註</label><input type="text" id="f-washer-note" placeholder="清潔狀況…"></div>
+      </div>
+      <div class="divider"></div>
+      <h3 class="mb1">🚿 水壓</h3>
+      <div class="field"><label>水壓評分（0–5分）</label><input type="number" id="f-wp-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-wp-note" placeholder="備註…"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">❄️ 冷氣</h3>
+      <div class="field"><label>品牌</label><input type="text" id="f-ac-brand" placeholder="日立、大金…"></div>
+      <label class="mb1" style="margin-top:8px;display:block">異音</label><div id="opts-ac-noise"></div>
+      <label class="mb1" style="margin-top:10px;display:block">霉味</label><div id="opts-ac-smell"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">📶 網速</h3>
+      <div class="field"><label>下載速度（Mbps）</label><input type="number" id="f-speed" min="0" max="10000" placeholder="130" oninput="nn(this,0,10000);calcScore()"></div>
+      <div id="speed-hint" class="tmuted mt1" style="font-size:12px"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">🔇 隔音與採光</h3>
+      <div class="field"><label>牆壁評分（0–5分）</label><input type="number" id="f-wall-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-wall-note" placeholder="實心/空心…"></div>
+      <div class="field"><label>採光評分（0–5分）</label><input type="number" id="f-light-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-light-note" placeholder="西曬/對外窗…"></div>
+      <div class="field"><label>早上噪音（0–5分）</label><input type="number" id="f-noise-am" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>晚上噪音（0–5分）</label><input type="number" id="f-noise-pm" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div id="form-env-custom"></div>
+    </div>
+    <!-- SAFETY -->
+    <div class="section" id="sec-safety">
+      <h3 class="mb1">🔒 門鎖</h3><div id="opts-lock"></div>
+      <div class="mt2"><div class="tog-row" onclick="togH('f-change-lock')"><div id="f-change-lock-tog" class="tog"></div><span id="f-change-lock-lbl">可換鎖芯（+2分）</span></div><input type="hidden" id="f-change-lock" class="tv" value="0"></div>
+      <label class="mb1" style="margin-top:12px;display:block">監視器</label><div id="opts-cctv"></div>
+      <div class="field mt2"><label>走廊亮度（0–5分）</label><input type="number" id="f-corridor-score" min="0" max="5" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>
+      <div class="field"><label>備註</label><input type="text" id="f-corridor-note" placeholder="備註…"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">🗑 垃圾</h3><div id="opts-trash"></div>
+      <div class="field mt1"><label>垃圾車時間</label><input type="text" id="f-trash-time" placeholder="週一三五 20:00"></div>
+      <label class="mb1" style="margin-top:12px;display:block">📦 包裹代收</label><div id="opts-parcel"></div>
+      <div class="divider"></div>
+      <h3 class="mb1">🚗 停車</h3><div id="opts-parking"></div>
+      <!-- dynamic toggle sub-items for safety crits -->
+      <div id="form-safety-subs"></div>
+      <div id="form-safety-custom"></div>
+    </div>
+    <!-- PHOTOS -->
+    <div class="section" id="sec-photos">
+      <p class="tmuted mb2" style="font-size:12px">點擊上傳照片；點 ✕ 刪除</p>
+      <div id="photo-cats-form"></div>
+    </div>
+    <!-- NOTES -->
+    <div class="section" id="sec-notes">
+      <div class="field"><label>整體備忘錄</label><textarea id="f-overall-note" rows="5" placeholder="看房心得、特別注意事項…"></textarea></div>
+      <div style="background:var(--warning-bg);border:.5px solid var(--warning);border-radius:var(--rl);padding:1rem;margin-top:1rem">
+        <h3 style="color:var(--warning-text);margin-bottom:.4rem">📝 簽約防坑提醒</h3>
+        <div style="font-size:12px;color:var(--warning-text);line-height:1.9">1. 點交時錄影所有刮痕、漏水、家具現況<br>2. 查看房東「房屋所有權狀」或謄本，確認身份<br>3. 租金與押金務必匯款，禁付現金<br>4. 確認電費不超過台電當期平均電價（2024新法）<br>5. 陽台外推、非法隔間要注意（推開窗看外面）</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="fbet"><div id="score-preview"></div><div class="flex" style="gap:8px"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-p" onclick="saveProp()">儲存</button></div></div>
+  </div>
+</div>
+
+<input type="file" id="file-in" style="display:none" accept="image/*" multiple onchange="handlePhoto(event)">
+
+<script>
+// ═══════════════ SUPABASE CONFIG ═══════════════
+// 請在此填寫你的 Supabase ANON KEY
+const supabaseUrl = 'https://uilxaukdgwrctafipdre.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpbHhhdWtkZ3dyY3RhZmlwZHJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTE0MTAsImV4cCI6MjA5MzYyNzQxMH0.QSqu-ZSi0LN_CBU4tm4TM1OzhuX7hXr1c7gWWehY19o'; 
+const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+// ═══════════════ STATE ═══════════════
+let props    = []; // 改為從雲端抓取
+let settings = JSON.parse(localStorage.getItem('rn-settings') || 'null') || defSettings();
+let editId=null, curPhotoCat=null, cmpSel=[];
+
+function persist(){
+  // 設定依然保留在 local
+  localStorage.setItem('rn-settings', JSON.stringify(settings));
+}
+
+// 雲端資料同步函數
+async function initCloudData() {
+  const { data, error } = await supabase
+    .from('properties')
+    .select('content')
+    .order('score', { ascending: false });
+
+  if (!error && data) {
+    props = data.map(item => item.content);
+    renderList();
+    renderRanking();
+  } else if (error) {
+    console.error('抓取雲端資料失敗:', error.message);
+  }
+}
+
+// ═══════════════ DEFAULT SETTINGS ═══════════════
+function defSettings(){
+  return {
+    criteria:[
+      // ── basic ──
+      {id:'metro', tab:'basic', name:'捷運站距離', type:'options',
+        options:[{l:'0~8分鐘',s:5},{l:'8~15分鐘',s:3},{l:'15分鐘以上',s:0}]},
+      {id:'layout', tab:'basic', name:'格局配置', type:'layout',
+        rooms1:3, rooms2:5, living1:3, bath1:3, bath0:-99, balcony1:3},
+      {id:'floor', tab:'basic', name:'樓層', type:'options',
+        options:[{l:'1~2樓',s:2},{l:'3樓',s:5},{l:'4樓',s:4},{l:'5樓以上',s:3}],
+        subs:[
+          {id:'elevator', name:'電梯', scoreOn:2, scoreOff:0},
+          {id:'rooftop',  name:'頂樓加蓋', scoreOn:-50, scoreOff:0}
+        ]},
+      // ── cost ──
+      {id:'rent', tab:'cost', name:'租金', type:'rent-tiers',
+        tiers:[{max:15000,s:10},{max:20000,s:8},{max:25000,s:6},{max:30000,s:4},{max:40000,s:2}], overScore:0},
+      {id:'electric', tab:'cost', name:'電費方式', type:'options',
+        options:[{l:'台電帳單',s:5},{l:'每度4元以下',s:4},{l:'每度4~5元',s:2},{l:'每度5元以上',s:0}]},
+      {id:'water', tab:'cost', name:'水費方式', type:'options',
+        options:[{l:'台水帳單',s:5},{l:'內含',s:4},{l:'定額收費',s:2}]},
+      {id:'repair', tab:'cost', name:'維修責任', type:'options',
+        options:[{l:'房東全責',s:5},{l:'耗材自理',s:2}]},
+      // ── env ──
+      {id:'mold',    tab:'env', name:'家具霉味',   type:'score', maxScore:5},
+      {id:'tv',      tab:'env', name:'廁所通風',   type:'score', maxScore:5},
+      {id:'outlet',  tab:'env', name:'插座',       type:'score', maxScore:5},
+      {id:'storage', tab:'env', name:'收納空間',   type:'score', maxScore:5},
+      {id:'washer',  tab:'env', name:'洗衣機',     type:'options',
+        options:[{l:'無提供',s:3},{l:'個人專用',s:null},{l:'共用',s:-99}]},
+      {id:'wp',      tab:'env', name:'水壓',       type:'score', maxScore:5},
+      {id:'ac-noise',tab:'env', name:'冷氣異音',   type:'options',
+        options:[{l:'有',s:0},{l:'尚可接受',s:3},{l:'無',s:5}]},
+      {id:'ac-smell',tab:'env', name:'冷氣霉味',   type:'options',
+        options:[{l:'有',s:0},{l:'尚可接受',s:3},{l:'無',s:5}]},
+      {id:'speed',   tab:'env', name:'手機網速',   type:'options',
+        options:[{l:'60~100 Mbps',s:2},{l:'100~130 Mbps',s:3},{l:'130~150 Mbps',s:4},{l:'150 Mbps以上',s:5}]},
+      {id:'wall',    tab:'env', name:'牆壁隔音',   type:'score', maxScore:5},
+      {id:'light',   tab:'env', name:'採光',       type:'score', maxScore:5},
+      {id:'noise-am',tab:'env', name:'早上噪音',   type:'score', maxScore:5},
+      {id:'noise-pm',tab:'env', name:'晚上噪音',   type:'score', maxScore:5},
+      // ── safety ──
+      {id:'lock',    tab:'safety', name:'門鎖類型', type:'options',
+        options:[{l:'電子鎖',s:3},{l:'傳統鎖',s:3}],
+        subs:[{id:'change-lock', name:'可換鎖芯', scoreOn:2, scoreOff:0}]},
+      {id:'cctv',    tab:'safety', name:'監視器',   type:'options',
+        options:[{l:'有',s:3},{l:'無',s:0}]},
+      {id:'corridor',tab:'safety', name:'走廊亮度', type:'score', maxScore:5},
+      {id:'trash',   tab:'safety', name:'垃圾處理', type:'options',
+        options:[{l:'集中管理',s:5},{l:'追垃圾車',s:3}]},
+      {id:'parcel',  tab:'safety', name:'包裹代收', type:'options',
+        options:[{l:'有',s:5},{l:'沒有',s:0}]},
+      {id:'parking', tab:'safety', name:'停車',     type:'options',
+        options:[{l:'下樓有停車位',s:5},{l:'走路0~8分鐘有車位',s:4},{l:'走路8~15分鐘有車位',s:3},{l:'走路15分鐘以上有車位',s:1},{l:'完全沒有停車位',s:0}]},
+    ],
+    photoCats:['格局配置（房廳衛陽台）','氣味與濕氣（家具）','生活動線（插座）','收納空間','洗衣機','出入安全（門鎖）','採光']
+  };
+}
+
+// ═══════════════ INPUT HELPERS ═══════════════
+function nn(el,lo,hi){if(el.value==='')return;let v=parseFloat(el.value);if(isNaN(v)){el.value='';return;}if(v<lo)el.value=lo;if(v>hi)el.value=hi;}
+function cs(el){if(el.value==='')return;let v=parseInt(el.value,10);if(isNaN(v)){el.value='';return;}if(v<0)el.value=0;if(v>5)el.value=5;}
+
+// ═══════════════ TOGGLES ═══════════════
+function togH(id){
+  const el=document.getElementById(id),tog=document.getElementById(id+'-tog');
+  if(!el||!tog)return;
+  const next=el.value==='1'?'0':'1';el.value=next;tog.classList.toggle('on',next==='1');
+  updateSubTogLabel(id);
+  calcScore();
+}
+function setTog(id,v){
+  const el=document.getElementById(id),tog=document.getElementById(id+'-tog');
+  if(!el||!tog)return;
+  const on=(v==='1'||v===1||v===true);el.value=on?'1':'0';tog.classList.toggle('on',on);
+}
+function updateSubTogLabel(togId){
+  const subId=togId.replace('f-','');
+  for(const c of settings.criteria){
+    const sub=(c.subs||[]).find(s=>s.id===subId);
+    if(sub){
+      const lbl=document.getElementById(togId+'-lbl');
+      if(lbl){
+        const el=document.getElementById(togId);
+        const score=el?.value==='1'?sub.scoreOn:sub.scoreOff;
+        const sign=score>=0?'+':'';
+        lbl.textContent=sub.name+'（'+sign+score+'分）';
+      }
+      return;
+    }
+  }
+}
+
+// ═══════════════ CHIPS ═══════════════
+function initChips(gid){document.querySelectorAll('#'+gid+' .chip input').forEach(cb=>{cb.addEventListener('change',function(){this.closest('.chip').classList.toggle('on',this.checked);});});}
+function setChips(gid,vals){document.querySelectorAll('#'+gid+' .chip input').forEach(cb=>{const on=(vals||[]).includes(cb.value);cb.checked=on;cb.closest('.chip').classList.toggle('on',on);});}
+function getChips(gid){return Array.from(document.querySelectorAll('#'+gid+' .chip input:checked')).map(c=>c.value);}
+function toggleMgmt(){const cb=document.querySelector('#chips-ex input[value="管理費"]');document.getElementById('mgmt-row').classList.toggle('hidden',!cb?.checked);}
+
+// ═══════════════ RENDER FORM OPTIONS ═══════════════
+function getCrit(id){return settings.criteria.find(c=>c.id===id);}
+function renderOpts(containerId, critId, onCh){
+  const c=getCrit(critId),div=document.getElementById(containerId);
+  if(!c||!div||c.type!=='options')return;
+  const cb=onCh||'calcScore()';
+  div.innerHTML=c.options.map((o,i)=>{
+    const sv=o.s;let scls,sl;
+    if(sv===null){scls='ss';sl='自評';}
+    else if(sv>0){scls='sp';sl='+'+sv+'分';}
+    else if(sv===0){scls='sz';sl='0分';}
+    else{scls='sn2';sl=sv+'分';}
+    return`<label class="oi"><input type="radio" name="r-${critId}" value="${i}" onchange="${cb}"><span class="oi-label">${o.l}</span><span class="oi-s ${scls}">${sl}</span></label>`;
+  }).join('');
+}
+function getSelOpt(critId){const el=document.querySelector('input[name="r-'+critId+'"]:checked');if(!el)return null;const c=getCrit(critId);return c?c.options[+el.value]:null;}
+function getOptScore(critId){const o=getSelOpt(critId);return(o&&o.s!==null)?o.s:0;}
+function setOpt(critId,idx){if(idx==null)return;const r=document.querySelector('input[name="r-'+critId+'"][value="'+idx+'"]');if(r)r.checked=true;}
+
+// ═══════════════ FORM RENDER DYNAMIC PARTS ═══════════════
+function renderAllOpts(){
+  ['metro','floor','electric','water','repair','ac-noise','ac-smell','lock','cctv','trash','parcel','parking'].forEach(id=>renderOpts('opts-'+id,id));
+  renderOpts('opts-washer','washer','handleWasher()');
+  renderFormPhotoCats();
+  renderFormSubs();
+  renderFormCustom();
+  updateAllSubLabels();
+}
+function handleWasher(){const o=getSelOpt('washer');document.getElementById('washer-self').classList.toggle('hidden',!(o&&o.l==='個人專用'));calcScore();}
+function renderFormPhotoCats(){
+  const div=document.getElementById('photo-cats-form');if(!div)return;
+  div.innerHTML=settings.photoCats.map((cat,i)=>`
+    <div class="field"><label>${cat}</label>
+      <div class="pua" onclick="triggerPhoto(${i})"><span style="font-size:20px">📷</span><span>點擊上傳照片</span></div>
+      <div class="pgrid" id="pg-${i}"></div>
+    </div>`).join('');
+}
+function renderFormSubs(){
+  const floorDiv=document.getElementById('form-floor-subs');
+  if(floorDiv){
+    const fc=getCrit('floor');
+    floorDiv.innerHTML=(fc?.subs||[]).map(sub=>`
+      <div class="mt1">
+        <div class="tog-row" onclick="togH('f-${sub.id}')"><div id="f-${sub.id}-tog" class="tog"></div><span id="f-${sub.id}-lbl">${sub.name}</span></div>
+        <input type="hidden" id="f-${sub.id}" class="tv" value="0">
+      </div>`).join('');
+  }
+  const safetyDiv=document.getElementById('form-safety-subs');
+  if(safetyDiv){
+    const safeCrits=settings.criteria.filter(c=>c.tab==='safety'&&(c.subs||[]).length);
+    safetyDiv.innerHTML=safeCrits.flatMap(c=>(c.subs||[]).map(sub=>`
+      <div class="mt2">
+        <div class="tog-row" onclick="togH('f-${sub.id}')"><div id="f-${sub.id}-tog" class="tog"></div><span id="f-${sub.id}-lbl">${sub.name}</span></div>
+        <input type="hidden" id="f-${sub.id}" class="tv" value="0">
+      </div>`)).join('');
+  }
+}
+function updateAllSubLabels(){
+  settings.criteria.forEach(c=>{(c.subs||[]).forEach(sub=>updateSubTogLabel('f-'+sub.id));});
+}
+function renderFormCustom(){
+  const tabMap={basic:'form-basic-custom',cost:'form-cost-custom',env:'form-env-custom',safety:'form-safety-custom'};
+  Object.entries(tabMap).forEach(([tab,divId])=>{
+    const div=document.getElementById(divId);if(!div)return;
+    const customs=settings.criteria.filter(c=>c.custom&&c.tab===tab);
+    if(!customs.length){div.innerHTML='';return;}
+    div.innerHTML=customs.map(c=>{
+      if(c.type==='options')return`<div class="divider"></div><h3 class="mb1">${c.name}</h3><div id="opts-${c.id}"></div>`;
+      if(c.type==='score')return`<div class="divider"></div><div class="field"><label>${c.name}（0–${c.maxScore||5}分）</label><input type="number" id="f-cust-${c.id}" min="0" max="${c.maxScore||5}" step="1" placeholder="3" oninput="cs(this);calcScore()"></div>`;
+      if(c.type==='toggle')return`<div class="divider"></div><div class="mt1"><div class="tog-row" onclick="togH('f-${c.id}')"><div id="f-${c.id}-tog" class="tog"></div><span id="f-${c.id}-lbl">${c.name}</span></div><input type="hidden" id="f-${c.id}" class="tv" value="0"></div>`;
+      return'';
+    }).join('');
+    customs.filter(c=>c.type==='options').forEach(c=>renderOpts('opts-'+c.id,c.id));
+    customs.filter(c=>c.type==='toggle').forEach(c=>updateSubTogLabel('f-'+c.id));
+  });
+}
+
+// ═══════════════ SCORE CALC ═══════════════
+function calcScore(){
+  let score=0,warns=[];
+  const mMin=document.getElementById('f-metro-min')?.value;
+  if(mMin!==''){const m=+mMin;if(m<=8)score+=5;else if(m<=15)score+=3;}
+  const bathRaw=document.getElementById('f-bath')?.value;
+  const bath=bathRaw===''||bathRaw==null?1:parseInt(bathRaw);
+  const rooms=parseInt(document.getElementById('f-rooms')?.value)||0;
+  const living=parseInt(document.getElementById('f-living')?.value)||0;
+  const balcony=parseInt(document.getElementById('f-balcony')?.value)||0;
+  const lc=getCrit('layout');
+  if(lc){
+    if(rooms>=2)score+=lc.rooms2??5;else if(rooms===1)score+=lc.rooms1??3;
+    if(living>=1)score+=lc.living1??3;
+    if(bathRaw!==''&&bath===0){score+=lc.bath0??-99;warns.push('無衛浴 '+(lc.bath0??-99)+'分');}else score+=lc.bath1??3;
+    if(balcony>=1)score+=lc.balcony1??3;
+  }
+  score+=getOptScore('floor');
+  const floorCrit=getCrit('floor');
+  (floorCrit?.subs||[]).forEach(sub=>{
+    const el=document.getElementById('f-'+sub.id);
+    if(el){
+      const pts=el.value==='1'?sub.scoreOn:sub.scoreOff;
+      score+=pts??0;
+      if(pts<0)warns.push(sub.name+' '+pts+'分');
+    }
+  });
+  const rentVal=parseFloat(document.getElementById('f-rent')?.value)||0;
+  const rentCrit=getCrit('rent');
+  let rentPts=0;
+  if(rentCrit&&rentVal>0){const st=[...rentCrit.tiers].sort((a,b)=>a.max-b.max);const m=st.find(t=>rentVal<=t.max);rentPts=m?m.s:(rentCrit.overScore??0);score+=rentPts;}
+  const rh=document.getElementById('rent-hint');if(rh)rh.textContent=rentVal>0?'租金加分：+'+rentPts+'分':'';
+  score+=getOptScore('electric');
+  score+=parseInt(document.getElementById('f-water-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-repair-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-mold-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-toilet-vent-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-outlet-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-storage-score')?.value)||0;
+  const wo=getSelOpt('washer');
+  if(wo){if(wo.s!==null)score+=wo.s;else score+=parseInt(document.getElementById('f-washer-score')?.value)||0;if(wo.s===-99)warns.push('共用洗衣機 -99分');}
+  score+=parseInt(document.getElementById('f-wp-score')?.value)||0;
+  score+=getOptScore('ac-noise');score+=getOptScore('ac-smell');
+  const spd=parseInt(document.getElementById('f-speed')?.value)||0;
+  const sc2=getCrit('speed');
+  if(sc2&&sc2.type==='options'){let sp=0;const os=sc2.options;if(spd>=150)sp=os[3]?.s??5;else if(spd>=130)sp=os[2]?.s??4;else if(spd>=100)sp=os[1]?.s??3;else if(spd>=60)sp=os[0]?.s??2;score+=sp;const sh=document.getElementById('speed-hint');if(sh)sh.textContent=spd>0?'網速加分：+'+sp+'分':'';}
+  score+=parseInt(document.getElementById('f-wall-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-light-score')?.value)||0;
+  score+=parseInt(document.getElementById('f-noise-am')?.value)||0;
+  score+=parseInt(document.getElementById('f-noise-pm')?.value)||0;
+  ['lock','cctv','trash','parcel','parking'].forEach(id=>score+=getOptScore(id));
+  const safeCrits=settings.criteria.filter(c=>c.tab==='safety');
+  safeCrits.forEach(c=>(c.subs||[]).forEach(sub=>{const el=document.getElementById('f-'+sub.id);if(el)score+=(el.value==='1'?sub.scoreOn:sub.scoreOff)??0;}));
+  score+=parseInt(document.getElementById('f-corridor-score')?.value)||0;
+  settings.criteria.filter(c=>c.custom&&c.type==='options').forEach(c=>score+=getOptScore(c.id));
+  settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el)score+=parseInt(el.value)||0;});
+  settings.criteria.filter(c=>c.custom&&c.type==='toggle').forEach(c=>{const el=document.getElementById('f-'+c.id);if(el)score+=(el.value==='1'?c.scoreOn:c.scoreOff)??0;});
+  const pv=document.getElementById('score-preview');
+  if(pv){const cls=score>=60?'sh':score>=30?'sm':'sl';pv.innerHTML=`<div class="sprev"><span style="font-size:13px;color:var(--text2)">目前分數</span><span class="sb ${cls}" style="font-size:15px">${score}分</span>${warns.length?`<span style="color:var(--danger);font-size:11px">${warns.join('、')}</span>`:''}</div>`;}
+  return score;
+}
+
+// ═══════════════ MODAL ═══════════════
+function openNew(){editId=null;document.getElementById('modal-title').textContent='新增物件';resetForm();renderAllOpts();document.getElementById('prop-modal').classList.remove('hidden');switchSec('basic');}
+function openEdit(id){editId=id;const p=props.find(x=>x.id===id);if(!p)return;document.getElementById('modal-title').textContent='編輯物件';resetForm();renderAllOpts();loadForm(p);document.getElementById('prop-modal').classList.remove('hidden');switchSec('basic');}
+function closeModal(){document.getElementById('prop-modal').classList.add('hidden');}
+
+const FIDS=['f-date','f-addr','f-metro-name','f-metro-min','f-rooms','f-living','f-bath','f-balcony','f-floor','f-total-floor','f-rent','f-deposit','f-mgmt','f-kwh','f-water-score','f-early-exit','f-repair-score','f-repair-note','f-mold-score','f-mold-note','f-toilet-vent-score','f-toilet-vent-note','f-outlet-room','f-outlet-living','f-outlet-bath','f-outlet-score','f-outlet-note','f-storage-count','f-storage-score','f-storage-note','f-washer-score','f-washer-note','f-wp-score','f-wp-note','f-ac-brand','f-speed','f-wall-score','f-wall-note','f-light-score','f-light-note','f-noise-am','f-noise-pm','f-corridor-score','f-corridor-note','f-trash-time','f-overall-note'];
+function resetForm(){
+  FIDS.forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.querySelectorAll('input.tv').forEach(e=>e.value='0');
+  document.querySelectorAll('.tog').forEach(t=>t.classList.remove('on'));
+  setChips('chips-eq',[]);setChips('chips-ex',[]);
+  document.getElementById('mgmt-row').classList.add('hidden');
+  document.getElementById('washer-self').classList.add('hidden');
+  document.getElementById('score-preview').innerHTML='';
+}
+function loadForm(p){
+  const sv=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v;};
+  sv('f-date',p.date);sv('f-addr',p.addr);sv('f-metro-name',p.metroName);sv('f-metro-min',p.metroMin);
+  sv('f-rooms',p.rooms);sv('f-living',p.living);sv('f-bath',p.bath);sv('f-balcony',p.balcony);
+  sv('f-floor',p.floor);sv('f-total-floor',p.totalFloor);
+  sv('f-rent',p.rent);sv('f-deposit',p.deposit);sv('f-mgmt',p.mgmtFee);
+  sv('f-kwh',p.kwh);sv('f-water-score',p.waterScore);sv('f-early-exit',p.earlyExit);
+  sv('f-repair-score',p.repairScore);sv('f-repair-note',p.repairNote);
+  sv('f-mold-score',p.moldScore);sv('f-mold-note',p.moldNote);
+  sv('f-toilet-vent-score',p.toiletVentScore);sv('f-toilet-vent-note',p.toiletVentNote);
+  sv('f-outlet-room',p.outletRoom);sv('f-outlet-living',p.outletLiving);sv('f-outlet-bath',p.outletBath);
+  sv('f-outlet-score',p.outletScore);sv('f-outlet-note',p.outletNote);
+  sv('f-storage-count',p.storageCount);sv('f-storage-score',p.storageScore);sv('f-storage-note',p.storageNote);
+  sv('f-washer-score',p.washerScore);sv('f-washer-note',p.washerNote);
+  sv('f-wp-score',p.wpScore);sv('f-wp-note',p.wpNote);
+  sv('f-ac-brand',p.acBrand);sv('f-speed',p.speed);
+  sv('f-wall-score',p.wallScore);sv('f-wall-note',p.wallNote);
+  sv('f-light-score',p.lightScore);sv('f-light-note',p.lightNote);
+  sv('f-noise-am',p.noiseAm);sv('f-noise-pm',p.noisePm);
+  sv('f-corridor-score',p.corridorScore);sv('f-corridor-note',p.corridorNote);
+  sv('f-trash-time',p.trashTime);sv('f-overall-note',p.overallNote);
+  if(p.toggles)Object.entries(p.toggles).forEach(([id,v])=>setTog('f-'+id,v));
+  setChips('chips-eq',p.equipment||[]);setChips('chips-ex',p.excluded||[]);
+  if((p.excluded||[]).includes('管理費'))document.getElementById('mgmt-row').classList.remove('hidden');
+  if(p.opts)Object.keys(p.opts).forEach(cid=>setOpt(cid,p.opts[cid]));
+  const wo=getSelOpt('washer');if(wo&&wo.l==='個人專用')document.getElementById('washer-self').classList.remove('hidden');
+  if(p.photos)Object.keys(p.photos).forEach(ci=>{const g=document.getElementById('pg-'+ci);if(g)(p.photos[ci]||[]).forEach(src=>addThumb(g,src));});
+  updateAllSubLabels();
+  calcScore();
+}
+
+// ═══════════════ SAVE ═══════════════
+async function saveProp(){
+  const gv=id=>{const e=document.getElementById(id);return e?e.value:'';};
+  const gn=id=>{const v=gv(id);return v===''?null:parseFloat(v);};
+  const opts={};settings.criteria.forEach(c=>{const r=document.querySelector('input[name="r-'+c.id+'"]:checked');if(r)opts[c.id]=+r.value;});
+  const toggles={};
+  document.querySelectorAll('input.tv').forEach(el=>{const id=el.id.replace('f-','');toggles[id]=el.value;});
+  const custScores={};settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el&&el.value!=='')custScores[c.id]=parseInt(el.value);});
+  const photos={};settings.photoCats.forEach((_,i)=>{const g=document.getElementById('pg-'+i);if(g){const srcs=Array.from(g.querySelectorAll('img.pthumb')).map(im=>im.src);if(srcs.length)photos[i]=srcs;}});
+  const score=calcScore();
+  const p={id:editId||Date.now().toString(),date:gv('f-date'),addr:gv('f-addr'),metroName:gv('f-metro-name'),metroMin:gn('f-metro-min'),rooms:gn('f-rooms'),living:gn('f-living'),bath:gn('f-bath'),balcony:gn('f-balcony'),floor:gn('f-floor'),totalFloor:gn('f-total-floor'),rent:gn('f-rent'),deposit:gn('f-deposit'),mgmtFee:gn('f-mgmt'),equipment:getChips('chips-eq'),excluded:getChips('chips-ex'),summer:gv('f-summer'),kwh:gn('f-kwh'),waterScore:gn('f-water-score'),earlyExit:gn('f-early-exit'),repairScore:gn('f-repair-score'),repairNote:gv('f-repair-note'),moldScore:gn('f-mold-score'),moldNote:gv('f-mold-note'),toiletVentScore:gn('f-toilet-vent-score'),toiletVentNote:gv('f-toilet-vent-note'),outletRoom:gn('f-outlet-room'),outletLiving:gn('f-outlet-living'),outletBath:gn('f-outlet-bath'),outletScore:gn('f-outlet-score'),outletNote:gv('f-outlet-note'),storageCount:gn('f-storage-count'),storageScore:gn('f-storage-score'),storageNote:gv('f-storage-note'),washerScore:gn('f-washer-score'),washerNote:gv('f-washer-note'),wpScore:gn('f-wp-score'),wpNote:gv('f-wp-note'),acBrand:gv('f-ac-brand'),speed:gn('f-speed'),wallScore:gn('f-wall-score'),wallNote:gv('f-wall-note'),lightScore:gn('f-light-score'),lightNote:gv('f-light-note'),noiseAm:gn('f-noise-am'),noisePm:gn('f-noise-pm'),corridorScore:gn('f-corridor-score'),corridorNote:gv('f-corridor-note'),trashTime:gv('f-trash-time'),overallNote:gv('f-overall-note'),toggles,opts,custScores,photos,score,updatedAt:Date.now()};
+
+  // 雲端儲存
+  const { error } = await supabase
+    .from('properties')
+    .upsert({ id: p.id, addr: p.addr, score: p.score, content: p });
+
+  if (error) {
+    alert('儲存失敗：' + error.message);
+  } else {
+    alert('已同步至雲端！');
+    closeModal();
+    initCloudData();
+  }
+}
+
+// ═══════════════ LIST / RANKING ═══════════════
+function badge(s){const cls=s>=60?'sh':s>=30?'sm':s<-10?'sn':'sl';return`<span class="sb ${cls}">${s}分</span>`;}
+function fmtLy(p){return[p.rooms?p.rooms+'房':'',p.living?p.living+'廳':'',p.bath?p.bath+'衛':'',p.balcony?p.balcony+'陽台':''].filter(Boolean).join(' ')||'-';}
+function renderList(){
+  const c=document.getElementById('prop-list'),e=document.getElementById('prop-empty');
+  if(!props.length){c.innerHTML='';e.classList.remove('hidden');return;}e.classList.add('hidden');
+  c.innerHTML=props.map(p=>{
+    const m=p.metroName?'🚇 '+p.metroName+(p.metroMin!=null?' '+p.metroMin+'分鐘':''):'';
+    const r=p.rent?'💰 NT$'+p.rent.toLocaleString()+'/月':'';
+    const eq=(p.equipment||[]).length?'🛋 '+p.equipment.join('、'):'';
+    return`<div class="prop-card"><div class="pc-hdr"><div style="flex:1;min-width:0"><div style="font-weight:500;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.addr||'(未填地址)'}</div><div class="pc-meta">${p.date?'<span>📅 '+p.date+'</span>':''}${m?'<span>'+m+'</span>':''}${fmtLy(p)!=='-'?'<span>🏠 '+fmtLy(p)+'</span>':''}${r?'<span>'+r+'</span>':''}${eq?'<span style="font-size:11px">'+eq+'</span>':''}</div></div>${badge(p.score||0)}</div>${p.overallNote?'<div class="note-box">'+p.overallNote+'</div>':''}<div class="pc-act"><button class="btn btn-sm" data-edit="${p.id}">✏️ 編輯</button><button class="btn btn-sm btn-d" data-del="${p.id}">🗑 刪除</button></div></div>`;
+  }).join('');
+}
+function renderRanking(){
+  const sorted=[...props].sort((a,b)=>(b.score||0)-(a.score||0));
+  const c=document.getElementById('rank-list'),e=document.getElementById('rank-empty');
+  if(!sorted.length){c.innerHTML='';e.classList.remove('hidden');return;}e.classList.add('hidden');
+  const m=['🥇','🥈','🥉'];
+  c.innerHTML=sorted.map((p,i)=>`<div class="ri" data-edit="${p.id}"><div class="rn">${m[i]||'#'+(i+1)}</div><div class="rinfo"><div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.addr||'(未填地址)'}</div><div class="rsub">${[fmtLy(p),p.rent?'NT$'+p.rent.toLocaleString()+'/月':'',p.metroName?p.metroName+(p.metroMin!=null?' '+p.metroMin+'分鐘':''):''].filter(x=>x&&x!=='-').join(' · ')}</div></div>${badge(p.score||0)}</div>`).join('');
+}
+
+// ═══════════════ COMPARE ═══════════════
+function renderCmpSel(){
+  const div=document.getElementById('cmp-sel');
+  if(!props.length){div.innerHTML='<p class="tmuted">尚無物件</p>';document.getElementById('cmp-result').innerHTML='';return;}
+  div.innerHTML=props.map(p=>`<div class="cpill ${cmpSel.includes(p.id)?'on':''}" onclick="toggleCmp('${p.id}')">${p.addr||'(未填)'} ${badge(p.score||0)}</div>`).join('');
+  if(cmpSel.length===2)renderCmpResult();
+  else document.getElementById('cmp-result').innerHTML=`<p class="tmuted">${cmpSel.length===1?'再選一個物件':'請選擇 2 個物件'}</p>`;
+}
+function toggleCmp(id){const i=cmpSel.indexOf(id);if(i>=0)cmpSel.splice(i,1);else{if(cmpSel.length>=2)cmpSel.shift();cmpSel.push(id);}renderCmpSel();}
+function optLbl(p,cid){if(!p.opts||p.opts[cid]==null)return null;const c=getCrit(cid);return c?c.options?.[p.opts[cid]]?.l:null;}
+function renderCmpResult(){
+  const [a,b]=cmpSel.map(id=>props.find(p=>p.id===id));if(!a||!b)return;
+  const rows=[
+    {l:'📊 總分',av:a.score||0,bv:b.score||0,fmt:v=>`<strong>${v}分</strong>`,hi:true},
+    {l:'📅 日期',av:a.date||'-',bv:b.date||'-',fmt:v=>v},
+    {l:'💰 月租金',av:a.rent,bv:b.rent,fmt:v=>v?`NT$${v.toLocaleString()}`:'-',lo:true},
+    {l:'🚇 捷運',av:a.metroMin,bv:b.metroMin,fmt:v=>v!=null?v+'分鐘':'-',lo:true},
+    {l:'🏠 格局',av:fmtLy(a),bv:fmtLy(b),fmt:v=>v},
+    {l:'🏢 樓層',av:a.floor!=null?`${a.floor}F/${a.totalFloor||'?'}F`:'-',bv:b.floor!=null?`${b.floor}F/${b.totalFloor||'?'}F`:'-',fmt:v=>v},
+    {l:'🛋 設備',av:(a.equipment||[]).join('、')||'-',bv:(b.equipment||[]).join('、')||'-',fmt:v=>v},
+    {l:'⚡ 電費/度',av:a.kwh,bv:b.kwh,fmt:v=>v!=null?v+'元':'-',lo:true},
+    {l:'❄️ 冷氣異音',av:optLbl(a,'ac-noise'),bv:optLbl(b,'ac-noise'),fmt:v=>v||'-'},
+    {l:'📶 網速',av:a.speed,bv:b.speed,fmt:v=>v!=null?v+' Mbps':'-',hi:true},
+    {l:'🔒 門鎖',av:optLbl(a,'lock'),bv:optLbl(b,'lock'),fmt:v=>v||'-'},
+    {l:'📦 包裹代收',av:optLbl(a,'parcel'),bv:optLbl(b,'parcel'),fmt:v=>v||'-'},
+    {l:'🚗 停車',av:optLbl(a,'parking'),bv:optLbl(b,'parking'),fmt:v=>v||'-'},
+    {l:'📝 備忘',av:a.overallNote||'-',bv:b.overallNote||'-',fmt:v=>v},
+  ];
+  const hdr=(p,x)=>`<strong>${p.addr||'物件'+x}</strong> ${badge(p.score||0)}`;
+  document.getElementById('cmp-result').innerHTML=`<div style="background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);overflow-x:auto"><table class="ctbl"><tr><td></td><td>${hdr(a,'A')}</td><td>${hdr(b,'B')}</td></tr>${rows.map(row=>{let ac='',bc='';if((row.hi||row.lo)&&row.av!=null&&row.bv!=null&&typeof row.av==='number'&&typeof row.bv==='number'){if(row.hi){if(row.av>row.bv)ac='cwin';else if(row.bv>row.av)bc='cwin';}if(row.lo){if(row.av<row.bv)ac='cwin';else if(row.bv<row.av)bc='cwin';}}return`<tr><td>${row.l}</td><td><span class="${ac}">${row.fmt(row.av)}</span></td><td><span class="${bc}">${row.fmt(row.bv)}</span></td></tr>`;}).join('')}</table></div>`;
+}
+
+// ═══════════════ SETTINGS RENDER ═══════════════
+function switchStgTab(tab){
+  document.querySelectorAll('.stg-ni').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.stg-panel').forEach(el=>el.classList.remove('active'));
+  document.getElementById('sp-'+tab)?.classList.add('active');
+  document.querySelectorAll('.stg-ni').forEach(el=>{if(el.getAttribute('onclick')?.includes("'"+tab+"'"))el.classList.add('active');});
+  if(tab==='photos')renderPhotoCatEditor();
+}
+
+function migrateSettings(){
+  settings.criteria = settings.criteria.filter(c => !c.id.startsWith('layout-'));
+  if(!settings.criteria.find(c=>c.id==='layout')){
+    settings.criteria.unshift({id:'layout', tab:'basic', name:'格局配置', type:'layout',
+      rooms1:3, rooms2:5, living1:3, bath1:3, bath0:-99, balcony1:3});
+  }
+  const floorCrit = settings.criteria.find(c=>c.id==='floor');
+  if(floorCrit && !floorCrit.subs){
+    floorCrit.subs = [
+      {id:'elevator', name:'電梯', scoreOn:2, scoreOff:0},
+      {id:'rooftop',  name:'頂樓加蓋', scoreOn:-50, scoreOff:0}
+    ];
+  }
+  const subOnlyIds = ['elevator','rooftop'];
+  settings.criteria = settings.criteria.filter(c => !subOnlyIds.includes(c.id) || c.custom);
+  persist();
+}
+migrateSettings();
+
+function renderSettings(){
+  ['basic','cost','env','safety','other'].forEach(tab=>{
+    const div=document.getElementById('sl-'+tab);if(!div)return;
+    const crits=settings.criteria.filter(c=>c.tab===tab);
+    let num=1;
+    div.innerHTML=crits.map(c=>renderCritRow(c,num++)).join('');
+  });
+  renderPhotoCatEditor();
+}
+
+function renderSubsHtml(c){
+  if(!(c.subs||[]).length) return '';
+  const subs=c.subs.map(sub=>`
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 10px;background:var(--surface);border-radius:var(--r)">
+      <span style="font-size:12px;color:var(--text3);flex-shrink:0">└</span>
+      <input type="text" value="${sub.name}" onchange="updSub('${c.id}','${sub.id}','name',this.value)"
+        style="flex:1;min-width:80px;font-size:13px;padding:4px 8px;font-weight:500">
+      <span style="font-size:12px;color:var(--text2);white-space:nowrap">勾選</span>
+      <input type="number" value="${sub.scoreOn??0}" onchange="updSub('${c.id}','${sub.id}','scoreOn',this.value)" style="width:64px">
+      <span style="font-size:12px;color:var(--text2);white-space:nowrap">未勾選</span>
+      <input type="number" value="${sub.scoreOff??0}" onchange="updSub('${c.id}','${sub.id}','scoreOff',this.value)" style="width:64px">
+      <button class="btn btn-sm btn-ic btn-d" onclick="rmSub('${c.id}','${sub.id}')">✕</button>
+    </div>`).join('');
+  return `<div style="margin-top:8px;padding:8px;background:var(--surface2);border-radius:var(--r);border-left:3px solid var(--accent);display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:11px;color:var(--accent);font-weight:500;margin-bottom:2px">開關計分子項目</span>
+    ${subs}
+  </div>`;
+}
+
+function renderCritRow(c,num){
+  let body='';
+  const typeBadge={options:'選項計分',score:'自評分數',toggle:'開關計分','rent-tiers':'區間計分',layout:'格局計分'};
+  const badge2=typeBadge[c.type]||c.type;
+  if(c.type==='layout'){
+    body=`<div class="crit-body"><div style="display:grid;gap:6px">... (略) ...</div></div>`;
+  } else if(c.type==='options'){
+    body=`<div class="crit-body">... (略) ...</div>`;
+  }
+  const isDeletable = c.id !== 'layout' && c.id !== 'rent';
+  return`<div class="crit-row" data-cid="${c.id}"><div class="crit-row-hdr">...</div>${body}</div>`;
+}
+
+// ═══════════════ SUPABASE DELETE ═══════════════
+async function doDelProp(id){
+  const { error } = await supabase
+    .from('properties')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    alert('刪除失敗：' + error.message);
+  } else {
+    removeIM();
+    initCloudData();
+  }
+}
+
+// ═══════════════ INIT ═══════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  initCloudData(); // 頁面載入時從雲端抓取資料
+  document.querySelectorAll('#chips-eq .chip input, #chips-ex .chip input').forEach(cb=>{
+    cb.addEventListener('change',function(){this.closest('.chip').classList.toggle('on',this.checked);});
+  });
+  document.addEventListener('click', e=>{
+    const editBtn = e.target.closest('[data-edit]');
+    if(editBtn){ openEdit(editBtn.dataset.edit); return; }
+    const delBtn = e.target.closest('[data-del]');
+    if(delBtn){ openDelProp(delBtn.dataset.del); return; }
+  });
+});
+</script>
+</body>
+</html>
