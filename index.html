@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🏠 租屋筆記</title>
-<!-- 引入 Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -394,39 +393,74 @@ label{font-size:13px;color:var(--text2);display:block;margin-bottom:4px}
 <input type="file" id="file-in" style="display:none" accept="image/*" multiple onchange="handlePhoto(event)">
 
 <script>
-// ═══════════════ SUPABASE CONFIG ═══════════════
-// 請在此填寫你的 Supabase ANON KEY
+// ═══════════════ SUPABASE ═══════════════
 const supabaseUrl = 'https://uilxaukdgwrctafipdre.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpbHhhdWtkZ3dyY3RhZmlwZHJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTE0MTAsImV4cCI6MjA5MzYyNzQxMH0.QSqu-ZSi0LN_CBU4tm4TM1OzhuX7hXr1c7gWWehY19o'; 
-const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpbHhhdWtkZ3dyY3RhZmlwZHJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTE0MTAsImV4cCI6MjA5MzYyNzQxMH0.QSqu-ZSi0LN_CBU4tm4TM1OzhuX7hXr1c7gWWehY19o';
+const db = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-// ═══════════════ STATE ═══════════════
-let props    = []; // 改為從雲端抓取
-let settings = JSON.parse(localStorage.getItem('rn-settings') || 'null') || defSettings();
-let editId=null, curPhotoCat=null, cmpSel=[];
-
-function persist(){
-  // 設定依然保留在 local
-  localStorage.setItem('rn-settings', JSON.stringify(settings));
-}
-
-// 雲端資料同步函數
+// 雲端資料同步
 async function initCloudData() {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('properties')
     .select('content')
     .order('score', { ascending: false });
-
   if (!error && data) {
-    props = data.map(item => item.content);
+    // Safely extract plain objects only
+    props = data.map(item => {
+      try { return JSON.parse(JSON.stringify(item.content)); }
+      catch(e) { return item.content; }
+    }).filter(Boolean);
     renderList();
     renderRanking();
   } else if (error) {
     console.error('抓取雲端資料失敗:', error.message);
+    // Fall back to empty list
+    renderList();
   }
 }
 
+async function cloudSave(p) {
+  // Serialize to plain JSON to avoid DataCloneError
+  const plainP = JSON.parse(JSON.stringify(p));
+  const { error } = await db
+    .from('properties')
+    .upsert({ id: plainP.id, addr: plainP.addr, score: plainP.score, content: plainP });
+  if (error) {
+    alert('儲存失敗：' + error.message);
+    return false;
+  }
+  return true;
+}
+
+async function cloudDelete(id) {
+  const { error } = await db
+    .from('properties')
+    .delete()
+    .eq('id', id);
+  if (error) {
+    alert('刪除失敗：' + error.message);
+    return false;
+  }
+  return true;
+}
+
+// ═══════════════ STATE ═══════════════
+let props    = JSON.parse(localStorage.getItem('rn-props')    || '[]');
+let settings = JSON.parse(localStorage.getItem('rn-settings') || 'null') || defSettings();
+let editId=null, curPhotoCat=null, cmpSel=[];
+
+function persist(){
+  localStorage.setItem('rn-props',    JSON.stringify(props));
+  localStorage.setItem('rn-settings', JSON.stringify(settings));
+}
+
 // ═══════════════ DEFAULT SETTINGS ═══════════════
+// criterion types:
+//   'options'   → options:[{l,s}], optional subs:[{id,name,scoreOn,scoreOff}]
+//   'score'     → maxScore:N, optional subs
+//   'toggle'    → scoreOn, scoreOff  (standalone toggle — used in sub array only)
+//   'rent-tiers'→ tiers:[{max,s}], overScore
+//   'layout'    → special built-in
 function defSettings(){
   return {
     criteria:[
@@ -495,6 +529,7 @@ function togH(id){
   const el=document.getElementById(id),tog=document.getElementById(id+'-tog');
   if(!el||!tog)return;
   const next=el.value==='1'?'0':'1';el.value=next;tog.classList.toggle('on',next==='1');
+  // update label if it's a sub-toggle
   updateSubTogLabel(id);
   calcScore();
 }
@@ -505,6 +540,7 @@ function setTog(id,v){
 }
 function updateSubTogLabel(togId){
   const subId=togId.replace('f-','');
+  // find sub in any criterion
   for(const c of settings.criteria){
     const sub=(c.subs||[]).find(s=>s.id===subId);
     if(sub){
@@ -564,6 +600,7 @@ function renderFormPhotoCats(){
     </div>`).join('');
 }
 function renderFormSubs(){
+  // render toggle subs for floor (basic tab)
   const floorDiv=document.getElementById('form-floor-subs');
   if(floorDiv){
     const fc=getCrit('floor');
@@ -573,6 +610,7 @@ function renderFormSubs(){
         <input type="hidden" id="f-${sub.id}" class="tv" value="0">
       </div>`).join('');
   }
+  // render toggle subs for safety tab
   const safetyDiv=document.getElementById('form-safety-subs');
   if(safetyDiv){
     const safeCrits=settings.criteria.filter(c=>c.tab==='safety'&&(c.subs||[]).length);
@@ -606,8 +644,10 @@ function renderFormCustom(){
 // ═══════════════ SCORE CALC ═══════════════
 function calcScore(){
   let score=0,warns=[];
+  // metro
   const mMin=document.getElementById('f-metro-min')?.value;
   if(mMin!==''){const m=+mMin;if(m<=8)score+=5;else if(m<=15)score+=3;}
+  // layout
   const bathRaw=document.getElementById('f-bath')?.value;
   const bath=bathRaw===''||bathRaw==null?1:parseInt(bathRaw);
   const rooms=parseInt(document.getElementById('f-rooms')?.value)||0;
@@ -620,6 +660,7 @@ function calcScore(){
     if(bathRaw!==''&&bath===0){score+=lc.bath0??-99;warns.push('無衛浴 '+(lc.bath0??-99)+'分');}else score+=lc.bath1??3;
     if(balcony>=1)score+=lc.balcony1??3;
   }
+  // floor options + subs
   score+=getOptScore('floor');
   const floorCrit=getCrit('floor');
   (floorCrit?.subs||[]).forEach(sub=>{
@@ -630,14 +671,17 @@ function calcScore(){
       if(pts<0)warns.push(sub.name+' '+pts+'分');
     }
   });
+  // rent tiers
   const rentVal=parseFloat(document.getElementById('f-rent')?.value)||0;
   const rentCrit=getCrit('rent');
   let rentPts=0;
   if(rentCrit&&rentVal>0){const st=[...rentCrit.tiers].sort((a,b)=>a.max-b.max);const m=st.find(t=>rentVal<=t.max);rentPts=m?m.s:(rentCrit.overScore??0);score+=rentPts;}
   const rh=document.getElementById('rent-hint');if(rh)rh.textContent=rentVal>0?'租金加分：+'+rentPts+'分':'';
+  // cost options
   score+=getOptScore('electric');
   score+=parseInt(document.getElementById('f-water-score')?.value)||0;
   score+=parseInt(document.getElementById('f-repair-score')?.value)||0;
+  // env
   score+=parseInt(document.getElementById('f-mold-score')?.value)||0;
   score+=parseInt(document.getElementById('f-toilet-vent-score')?.value)||0;
   score+=parseInt(document.getElementById('f-outlet-score')?.value)||0;
@@ -646,6 +690,7 @@ function calcScore(){
   if(wo){if(wo.s!==null)score+=wo.s;else score+=parseInt(document.getElementById('f-washer-score')?.value)||0;if(wo.s===-99)warns.push('共用洗衣機 -99分');}
   score+=parseInt(document.getElementById('f-wp-score')?.value)||0;
   score+=getOptScore('ac-noise');score+=getOptScore('ac-smell');
+  // speed from options
   const spd=parseInt(document.getElementById('f-speed')?.value)||0;
   const sc2=getCrit('speed');
   if(sc2&&sc2.type==='options'){let sp=0;const os=sc2.options;if(spd>=150)sp=os[3]?.s??5;else if(spd>=130)sp=os[2]?.s??4;else if(spd>=100)sp=os[1]?.s??3;else if(spd>=60)sp=os[0]?.s??2;score+=sp;const sh=document.getElementById('speed-hint');if(sh)sh.textContent=spd>0?'網速加分：+'+sp+'分':'';}
@@ -653,13 +698,16 @@ function calcScore(){
   score+=parseInt(document.getElementById('f-light-score')?.value)||0;
   score+=parseInt(document.getElementById('f-noise-am')?.value)||0;
   score+=parseInt(document.getElementById('f-noise-pm')?.value)||0;
+  // safety options + subs
   ['lock','cctv','trash','parcel','parking'].forEach(id=>score+=getOptScore(id));
   const safeCrits=settings.criteria.filter(c=>c.tab==='safety');
   safeCrits.forEach(c=>(c.subs||[]).forEach(sub=>{const el=document.getElementById('f-'+sub.id);if(el)score+=(el.value==='1'?sub.scoreOn:sub.scoreOff)??0;}));
   score+=parseInt(document.getElementById('f-corridor-score')?.value)||0;
+  // custom
   settings.criteria.filter(c=>c.custom&&c.type==='options').forEach(c=>score+=getOptScore(c.id));
   settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el)score+=parseInt(el.value)||0;});
   settings.criteria.filter(c=>c.custom&&c.type==='toggle').forEach(c=>{const el=document.getElementById('f-'+c.id);if(el)score+=(el.value==='1'?c.scoreOn:c.scoreOff)??0;});
+  // display
   const pv=document.getElementById('score-preview');
   if(pv){const cls=score>=60?'sh':score>=30?'sm':'sl';pv.innerHTML=`<div class="sprev"><span style="font-size:13px;color:var(--text2)">目前分數</span><span class="sb ${cls}" style="font-size:15px">${score}分</span>${warns.length?`<span style="color:var(--danger);font-size:11px">${warns.join('、')}</span>`:''}</div>`;}
   return score;
@@ -678,7 +726,10 @@ function resetForm(){
   setChips('chips-eq',[]);setChips('chips-ex',[]);
   document.getElementById('mgmt-row').classList.add('hidden');
   document.getElementById('washer-self').classList.add('hidden');
+  const sh=document.getElementById('speed-hint');if(sh)sh.textContent='';
+  const rh=document.getElementById('rent-hint');if(rh)rh.textContent='';
   document.getElementById('score-preview').innerHTML='';
+  settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el)el.value='';});
 }
 function loadForm(p){
   const sv=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v;};
@@ -706,13 +757,14 @@ function loadForm(p){
   if((p.excluded||[]).includes('管理費'))document.getElementById('mgmt-row').classList.remove('hidden');
   if(p.opts)Object.keys(p.opts).forEach(cid=>setOpt(cid,p.opts[cid]));
   const wo=getSelOpt('washer');if(wo&&wo.l==='個人專用')document.getElementById('washer-self').classList.remove('hidden');
+  settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el&&p.custScores?.[c.id]!=null)el.value=p.custScores[c.id];});
   if(p.photos)Object.keys(p.photos).forEach(ci=>{const g=document.getElementById('pg-'+ci);if(g)(p.photos[ci]||[]).forEach(src=>addThumb(g,src));});
   updateAllSubLabels();
   calcScore();
 }
 
 // ═══════════════ SAVE ═══════════════
-async function saveProp(){
+function saveProp(){
   const gv=id=>{const e=document.getElementById(id);return e?e.value:'';};
   const gn=id=>{const v=gv(id);return v===''?null:parseFloat(v);};
   const opts={};settings.criteria.forEach(c=>{const r=document.querySelector('input[name="r-'+c.id+'"]:checked');if(r)opts[c.id]=+r.value;});
@@ -722,19 +774,12 @@ async function saveProp(){
   const photos={};settings.photoCats.forEach((_,i)=>{const g=document.getElementById('pg-'+i);if(g){const srcs=Array.from(g.querySelectorAll('img.pthumb')).map(im=>im.src);if(srcs.length)photos[i]=srcs;}});
   const score=calcScore();
   const p={id:editId||Date.now().toString(),date:gv('f-date'),addr:gv('f-addr'),metroName:gv('f-metro-name'),metroMin:gn('f-metro-min'),rooms:gn('f-rooms'),living:gn('f-living'),bath:gn('f-bath'),balcony:gn('f-balcony'),floor:gn('f-floor'),totalFloor:gn('f-total-floor'),rent:gn('f-rent'),deposit:gn('f-deposit'),mgmtFee:gn('f-mgmt'),equipment:getChips('chips-eq'),excluded:getChips('chips-ex'),summer:gv('f-summer'),kwh:gn('f-kwh'),waterScore:gn('f-water-score'),earlyExit:gn('f-early-exit'),repairScore:gn('f-repair-score'),repairNote:gv('f-repair-note'),moldScore:gn('f-mold-score'),moldNote:gv('f-mold-note'),toiletVentScore:gn('f-toilet-vent-score'),toiletVentNote:gv('f-toilet-vent-note'),outletRoom:gn('f-outlet-room'),outletLiving:gn('f-outlet-living'),outletBath:gn('f-outlet-bath'),outletScore:gn('f-outlet-score'),outletNote:gv('f-outlet-note'),storageCount:gn('f-storage-count'),storageScore:gn('f-storage-score'),storageNote:gv('f-storage-note'),washerScore:gn('f-washer-score'),washerNote:gv('f-washer-note'),wpScore:gn('f-wp-score'),wpNote:gv('f-wp-note'),acBrand:gv('f-ac-brand'),speed:gn('f-speed'),wallScore:gn('f-wall-score'),wallNote:gv('f-wall-note'),lightScore:gn('f-light-score'),lightNote:gv('f-light-note'),noiseAm:gn('f-noise-am'),noisePm:gn('f-noise-pm'),corridorScore:gn('f-corridor-score'),corridorNote:gv('f-corridor-note'),trashTime:gv('f-trash-time'),overallNote:gv('f-overall-note'),toggles,opts,custScores,photos,score,updatedAt:Date.now()};
-
-  // 雲端儲存
-  const { error } = await supabase
-    .from('properties')
-    .upsert({ id: p.id, addr: p.addr, score: p.score, content: p });
-
-  if (error) {
-    alert('儲存失敗：' + error.message);
-  } else {
-    alert('已同步至雲端！');
-    closeModal();
-    initCloudData();
-  }
+  if(editId){const i=props.findIndex(x=>x.id===editId);if(i>=0)props[i]=p;}else props.push(p);
+  persist();
+  // Cloud sync
+  cloudSave(p).then(ok => {
+    if(ok){ closeModal(); initCloudData(); }
+  });
 }
 
 // ═══════════════ LIST / RANKING ═══════════════
@@ -799,12 +844,16 @@ function switchStgTab(tab){
   if(tab==='photos')renderPhotoCatEditor();
 }
 
+// ── migrate old broken data ──
 function migrateSettings(){
+  // Remove old layout-* sub-criteria that were mistakenly stored as top-level items
   settings.criteria = settings.criteria.filter(c => !c.id.startsWith('layout-'));
+  // Ensure layout criterion exists as one item
   if(!settings.criteria.find(c=>c.id==='layout')){
     settings.criteria.unshift({id:'layout', tab:'basic', name:'格局配置', type:'layout',
       rooms1:3, rooms2:5, living1:3, bath1:3, bath0:-99, balcony1:3});
   }
+  // Ensure floor subs are embedded in floor, not as top-level items
   const floorCrit = settings.criteria.find(c=>c.id==='floor');
   if(floorCrit && !floorCrit.subs){
     floorCrit.subs = [
@@ -812,6 +861,7 @@ function migrateSettings(){
       {id:'rooftop',  name:'頂樓加蓋', scoreOn:-50, scoreOff:0}
     ];
   }
+  // Remove any stale top-level elevator/rooftop/change-lock that should only be subs
   const subOnlyIds = ['elevator','rooftop'];
   settings.criteria = settings.criteria.filter(c => !subOnlyIds.includes(c.id) || c.custom);
   persist();
@@ -851,33 +901,468 @@ function renderCritRow(c,num){
   let body='';
   const typeBadge={options:'選項計分',score:'自評分數',toggle:'開關計分','rent-tiers':'區間計分',layout:'格局計分'};
   const badge2=typeBadge[c.type]||c.type;
+
   if(c.type==='layout'){
-    body=`<div class="crit-body"><div style="display:grid;gap:6px">... (略) ...</div></div>`;
+    body=`<div class="crit-body">
+      <p style="font-size:12px;color:var(--text3);margin-top:4px;margin-bottom:8px">格局各項目的計分規則</p>
+      <div style="display:grid;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:var(--r)">
+          <span style="font-size:12px;color:var(--text2);min-width:36px">房數</span>
+          <span style="font-size:12px;color:var(--text3)">1房</span>
+          <input type="number" value="${c.rooms1??3}" onchange="updLayout('rooms1',this.value)" style="width:60px">
+          <span style="font-size:12px;color:var(--text3)">2房以上</span>
+          <input type="number" value="${c.rooms2??5}" onchange="updLayout('rooms2',this.value)" style="width:60px">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:var(--r)">
+          <span style="font-size:12px;color:var(--text2);min-width:36px">廳數</span>
+          <span style="font-size:12px;color:var(--text3)">1廳以上</span>
+          <input type="number" value="${c.living1??3}" onchange="updLayout('living1',this.value)" style="width:60px">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:var(--r)">
+          <span style="font-size:12px;color:var(--text2);min-width:36px">衛數</span>
+          <span style="font-size:12px;color:var(--text3)">1衛以上</span>
+          <input type="number" value="${c.bath1??3}" onchange="updLayout('bath1',this.value)" style="width:60px">
+          <span style="font-size:12px;color:var(--text3)">0衛</span>
+          <input type="number" value="${c.bath0??-99}" onchange="updLayout('bath0',this.value)" style="width:60px">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:var(--r)">
+          <span style="font-size:12px;color:var(--text2);min-width:36px">陽台</span>
+          <span style="font-size:12px;color:var(--text3)">有陽台</span>
+          <input type="number" value="${c.balcony1??3}" onchange="updLayout('balcony1',this.value)" style="width:60px">
+        </div>
+      </div>
+    </div>`;
+  } else if(c.type==='rent-tiers'){
+    const st=[...(c.tiers||[])].sort((a,b)=>a.max-b.max);
+    body=`<div class="crit-body">
+      <p style="font-size:12px;color:var(--text3);margin-top:6px;margin-bottom:8px">依租金區間給分，符合第一個「不超過」的區間即採用</p>
+      <div style="display:grid;grid-template-columns:1fr 70px auto;gap:5px;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--text3);font-weight:500">不超過（元/月）</span>
+        <span style="font-size:11px;color:var(--text3);font-weight:500">得分</span><span></span>
+      </div>
+      ${st.map((t,i)=>`<div class="oe-row"><input type="number" value="${t.max}" min="0" onchange="updRT(${i},'max',this.value)" style="flex:1"><input type="number" value="${t.s}" onchange="updRT(${i},'s',this.value)" style="width:70px"><button class="btn btn-sm btn-ic btn-d" onclick="rmRT(${i})">✕</button></div>`).join('')}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:.5px solid var(--border)">
+        <span style="font-size:13px;color:var(--text2);white-space:nowrap">超出所有區間得分</span>
+        <input type="number" value="${c.overScore??0}" onchange="updRTOver(this.value)" style="width:70px">
+      </div>
+      <button class="btn btn-sm mt2" onclick="addRT()">＋ 新增區間</button>
+    </div>`;
   } else if(c.type==='options'){
-    body=`<div class="crit-body">... (略) ...</div>`;
+    body=`<div class="crit-body">
+      <div style="margin-top:6px">
+        ${c.options.map((o,i)=>`
+          <div class="oe-row">
+            <input type="text" value="${o.l}" onchange="updOpt('${c.id}',${i},'l',this.value)" placeholder="選項名稱" style="flex:1">
+            <input type="number" value="${o.s===null?'':o.s}" onchange="updOpt('${c.id}',${i},'s',this.value)" placeholder="分數" style="width:70px">
+            <button class="btn btn-sm btn-ic btn-d" onclick="rmOpt('${c.id}',${i})">✕</button>
+          </div>`).join('')}
+        <button class="btn btn-sm mt1" onclick="addOpt('${c.id}')">＋ 新增選項</button>
+        ${renderSubsHtml(c)}
+        <button class="btn btn-sm mt2" onclick="addSub('${c.id}')" style="font-size:11px">＋ 新增開關計分子項目</button>
+      </div>
+    </div>`;
+  } else if(c.type==='score'){
+    body=`<div class="crit-body">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <span style="font-size:13px;color:var(--text2)">最高分</span>
+        <input type="number" value="${c.maxScore||5}" min="1" max="100" onchange="updCritProp('${c.id}','maxScore',this.value)" style="width:70px">
+      </div>
+      ${renderSubsHtml(c)}
+      <button class="btn btn-sm mt2" onclick="addSub('${c.id}')" style="font-size:11px">＋ 新增開關計分子項目</button>
+    </div>`;
+  } else if(c.type==='toggle'){
+    body=`<div class="crit-body">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text2)">勾選得分</span>
+        <input type="number" value="${c.scoreOn??0}" onchange="updCritProp('${c.id}','scoreOn',this.value)" style="width:70px">
+        <span style="font-size:13px;color:var(--text2);margin-left:8px">未勾選得分</span>
+        <input type="number" value="${c.scoreOff??0}" onchange="updCritProp('${c.id}','scoreOff',this.value)" style="width:70px">
+      </div>
+    </div>`;
   }
+
   const isDeletable = c.id !== 'layout' && c.id !== 'rent';
-  return`<div class="crit-row" data-cid="${c.id}"><div class="crit-row-hdr">...</div>${body}</div>`;
+  const isFirst = (() => {
+    const tabCrits = settings.criteria.filter(x => x.tab === c.tab);
+    return tabCrits[0]?.id === c.id;
+  })();
+  return`<div class="crit-row" data-cid="${c.id}">
+    <div class="crit-row-hdr">
+      ${!isFirst
+        ? `<button class="move-up-btn" onclick="moveCritUp('${c.id}')" title="往上移">▲</button>`
+        : `<span style="width:26px;display:inline-block"></span>`}
+      <span class="crit-num">${num}.</span>
+      <input class="crit-title-input" type="text" value="${c.name}" onchange="updCritName('${c.id}',this.value)" placeholder="項目名稱">
+      <span class="crit-badge">${badge2}</span>
+      ${isDeletable ? `<button class="btn btn-sm btn-d" onclick="openDelCrit('${c.id}')">刪除</button>` : ''}
+    </div>
+    ${body}
+  </div>`;
 }
 
-// ═══════════════ SUPABASE DELETE ═══════════════
-async function doDelProp(id){
-  const { error } = await supabase
-    .from('properties')
-    .delete()
-    .eq('id', id);
+// ═══════════════ SETTINGS MUTATIONS ═══════════════
+function updLayout(prop,v){const c=getCrit('layout');if(c)c[prop]=v===''?0:parseFloat(v);persist();}
+function updOpt(cid,i,f,v){const c=getCrit(cid);if(!c)return;if(f==='s')c.options[i].s=v===''?null:parseFloat(v);else c.options[i][f]=v;persist();}
+function rmOpt(cid,i){const c=getCrit(cid);if(!c||c.options.length<=1)return;c.options.splice(i,1);persist();renderSettings();}
+function addOpt(cid){const c=getCrit(cid);if(!c)return;c.options.push({l:'新選項',s:0});persist();renderSettings();}
+function updCritName(cid,v){const c=getCrit(cid);if(c)c.name=v;persist();}
+function updCritProp(cid,prop,v){const c=getCrit(cid);if(!c)return;c[prop]=v===''?null:parseFloat(v);persist();}
+function addSub(cid){const c=getCrit(cid);if(!c)return;if(!c.subs)c.subs=[];const sid='sub-'+Date.now();c.subs.push({id:sid,name:'新開關項目',scoreOn:0,scoreOff:0});persist();renderSettings();}
+function updSub(cid,sid,field,v){const c=getCrit(cid);if(!c)return;const sub=(c.subs||[]).find(s=>s.id===sid);if(!sub)return;if(field==='scoreOn'||field==='scoreOff')sub[field]=v===''?0:parseFloat(v);else sub[field]=v;persist();}
+function rmSub(cid,sid){const c=getCrit(cid);if(!c)return;c.subs=(c.subs||[]).filter(s=>s.id!==sid);persist();renderSettings();}
+function updRT(i,f,v){const c=getCrit('rent');if(!c||!c.tiers)return;const st=[...c.tiers].sort((a,b)=>a.max-b.max);st[i][f]=v===''?0:parseFloat(v);c.tiers=st;persist();renderSettings();}
+function rmRT(i){const c=getCrit('rent');if(!c||!c.tiers||c.tiers.length<=1)return;const st=[...c.tiers].sort((a,b)=>a.max-b.max);st.splice(i,1);c.tiers=st;persist();renderSettings();}
+function addRT(){const c=getCrit('rent');if(!c)return;if(!c.tiers)c.tiers=[];const mx=c.tiers.length?Math.max(...c.tiers.map(t=>t.max))+5000:20000;c.tiers.push({max:mx,s:0});persist();renderSettings();}
+function updRTOver(v){const c=getCrit('rent');if(!c)return;c.overScore=v===''?0:parseFloat(v);persist();}
 
-  if (error) {
-    alert('刪除失敗：' + error.message);
+// ═══════════════ REORDER (settings) ═══════════════
+function moveCritUp(cid){
+  const crits = settings.criteria;
+  const idx = crits.findIndex(c => c.id === cid);
+  if(idx <= 0) return;
+  const tab = crits[idx].tab;
+  // find previous item in the same tab
+  let prevIdx = idx - 1;
+  while(prevIdx >= 0 && crits[prevIdx].tab !== tab) prevIdx--;
+  if(prevIdx < 0 || crits[prevIdx].tab !== tab) return;
+  [crits[prevIdx], crits[idx]] = [crits[idx], crits[prevIdx]];
+  persist(); renderSettings();
+}
+
+// ═══════════════ ADD CUSTOM CRITERION MODAL ═══════════════
+function openAddCrit(tab){
+  removeIM();
+  const m=document.createElement('div');m.className='imodal';m.id='im-add';
+  m.innerHTML=`<div class="imodal-box">
+    <div class="fbet" style="margin-bottom:1rem"><span style="font-size:16px;font-weight:500">新增評分項目</span><button onclick="removeIM()" style="border:none;background:none;font-size:18px;cursor:pointer;color:#888">✕</button></div>
+    <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">項目名稱</label>
+    <input id="acm-name" type="text" placeholder="例：電梯、景觀、採光方向…" style="margin-bottom:1rem" oninput="acmSync()">
+    <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px">評分方式</label>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:.5px solid var(--border);border-radius:var(--r);cursor:pointer;font-size:13px">
+        <input type="radio" name="acm-type" value="options" checked onchange="acmSync()" style="margin-top:2px;accent-color:var(--accent)">
+        <span><strong>選項計分</strong><br><span style="color:var(--text3);font-size:12px">設定多個選項，每個選項各自對應加/扣分</span></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:.5px solid var(--border);border-radius:var(--r);cursor:pointer;font-size:13px">
+        <input type="radio" name="acm-type" value="score" onchange="acmSync()" style="margin-top:2px;accent-color:var(--accent)">
+        <span><strong>自評分數</strong><br><span style="color:var(--text3);font-size:12px">看房時填入 0–N 分</span></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:.5px solid var(--border);border-radius:var(--r);cursor:pointer;font-size:13px">
+        <input type="radio" name="acm-type" value="toggle" onchange="acmSync()" style="margin-top:2px;accent-color:var(--accent)">
+        <span><strong>開關計分</strong><br><span style="color:var(--text3);font-size:12px">勾選/不勾選，分別設定分數</span></span>
+      </label>
+    </div>
+    <!-- options area -->
+    <div id="acm-opts-area">
+      <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px">初始選項 <span style="color:var(--text3);font-size:11px">（可在設定中繼續新增、調整順序）</span></label>
+      <div id="acm-opts-list">
+        <div class="oe-row"><input type="text" value="好" style="flex:1"><input type="number" placeholder="分數（負=扣分）" value="5" style="width:90px"><button class="btn btn-sm btn-ic btn-d" onclick="this.closest('.oe-row').remove()">✕</button></div>
+        <div class="oe-row"><input type="text" value="普通" style="flex:1"><input type="number" placeholder="分數" value="3" style="width:90px"><button class="btn btn-sm btn-ic btn-d" onclick="this.closest('.oe-row').remove()">✕</button></div>
+        <div class="oe-row"><input type="text" value="差" style="flex:1"><input type="number" placeholder="分數" value="0" style="width:90px"><button class="btn btn-sm btn-ic btn-d" onclick="this.closest('.oe-row').remove()">✕</button></div>
+      </div>
+      <button class="btn btn-sm mt1" onclick="acmAddOpt()">＋ 新增選項</button>
+      <p style="font-size:11px;color:var(--text3);margin-top:5px">分數可為負數（扣分），留空 = 自評</p>
+    </div>
+    <!-- toggle area -->
+    <div id="acm-tog-area" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 80px;gap:6px;margin-bottom:6px">
+        <input type="text" id="acm-tog-on" placeholder="勾選標籤，例：有電梯" value="有">
+        <input type="number" id="acm-tog-on-s" placeholder="分數" value="2">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 80px;gap:6px">
+        <input type="text" id="acm-tog-off" placeholder="未勾選標籤" value="無">
+        <input type="number" id="acm-tog-off-s" placeholder="分數（0或負）" value="0">
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:5px">分數可為負數（扣分）</p>
+    </div>
+    <!-- score area -->
+    <div id="acm-score-area" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;color:var(--text2)">最高分上限</span>
+        <input type="number" id="acm-max-score" value="5" min="1" max="100" style="width:80px">
+      </div>
+    </div>
+    <!-- toggle sub option -->
+    <div style="margin-top:1rem;padding-top:1rem;border-top:.5px solid var(--border)">
+      <div class="fbet" style="margin-bottom:6px">
+        <span style="font-size:13px;font-weight:500">開關計分子項目</span>
+        <button class="btn btn-sm" onclick="acmAddSub()">＋ 新增</button>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:6px">例：在「樓層」項目下附加「電梯 +2 / 無 0」的開關子項</p>
+      <div id="acm-subs-list"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1.25rem">
+      <button onclick="removeIM()" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--border);background:#fff;font-size:13px;cursor:pointer;font-family:inherit">取消</button>
+      <button onclick="confirmAddCrit('${tab}')" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-family:inherit">新增</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  setTimeout(()=>document.getElementById('acm-name')?.focus(),50);
+}
+function acmSync(){
+  const type=document.querySelector('input[name="acm-type"]:checked')?.value||'options';
+  document.getElementById('acm-opts-area').style.display=type==='options'?'':'none';
+  document.getElementById('acm-tog-area').style.display=type==='toggle'?'':'none';
+  document.getElementById('acm-score-area').style.display=type==='score'?'':'none';
+}
+function acmAddOpt(){
+  const list=document.getElementById('acm-opts-list');if(!list)return;
+  const row=document.createElement('div');row.className='oe-row';
+  row.innerHTML=`<input type="text" placeholder="選項名稱" style="flex:1"><input type="number" placeholder="分數" value="0" style="width:90px"><button class="btn btn-sm btn-ic btn-d" onclick="this.closest('.oe-row').remove()">✕</button>`;
+  list.appendChild(row);
+}
+function acmAddSub(){
+  const list=document.getElementById('acm-subs-list');if(!list)return;
+  const row=document.createElement('div');
+  row.style.cssText='display:grid;grid-template-columns:1fr 80px 80px auto;gap:5px;align-items:center;margin-bottom:6px';
+  row.innerHTML=`<input type="text" placeholder="子項目名稱" value=""><input type="number" placeholder="勾選分數" value="0"><input type="number" placeholder="未勾選" value="0"><button class="btn btn-sm btn-ic btn-d" onclick="this.closest('div').remove()">✕</button>`;
+  list.appendChild(row);
+}
+function confirmAddCrit(tab){
+  const nameEl=document.getElementById('acm-name');
+  const name=nameEl?.value?.trim();if(!name){nameEl?.focus();return;}
+  const type=document.querySelector('input[name="acm-type"]:checked')?.value||'options';
+  const id='cust-'+Date.now();
+  let crit={id,name,tab,custom:true,type};
+  if(type==='options'){
+    const rows=document.querySelectorAll('#acm-opts-list .oe-row');
+    crit.options=Array.from(rows).map(row=>{
+      const ins=row.querySelectorAll('input');const l=ins[0]?.value?.trim()||'選項';const sv=ins[1]?.value;return{l,s:sv===''?null:parseFloat(sv)};
+    }).filter(o=>o.l);
+    if(!crit.options.length)crit.options=[{l:'好',s:5},{l:'差',s:0}];
+  } else if(type==='toggle'){
+    crit.scoreOn=parseFloat(document.getElementById('acm-tog-on-s')?.value)||0;
+    crit.scoreOff=parseFloat(document.getElementById('acm-tog-off-s')?.value)||0;
+    crit.onLabel=document.getElementById('acm-tog-on')?.value||'有';
+    crit.offLabel=document.getElementById('acm-tog-off')?.value||'無';
   } else {
-    removeIM();
-    initCloudData();
+    crit.maxScore=parseInt(document.getElementById('acm-max-score')?.value)||5;
   }
+  // collect subs
+  const subRows=document.querySelectorAll('#acm-subs-list > div');
+  if(subRows.length){
+    crit.subs=Array.from(subRows).map((row,i)=>{
+      const ins=row.querySelectorAll('input');
+      return{id:'sub-'+Date.now()+'-'+i,name:ins[0]?.value||'子項目',scoreOn:parseFloat(ins[1]?.value)||0,scoreOff:parseFloat(ins[2]?.value)||0};
+    });
+  }
+  settings.criteria.push(crit);persist();removeIM();renderSettings();
 }
+
+// ═══════════════ INLINE CONFIRM MODALS ═══════════════
+function removeIM(){document.querySelector('.imodal')?.remove();}
+function openDelCrit(cid){
+  const c=getCrit(cid);if(!c)return;removeIM();
+  const m=document.createElement('div');m.className='imodal';m.id='im-del';
+  m.innerHTML=`<div class="imodal-box" style="max-width:340px"><div style="font-size:15px;font-weight:500;margin-bottom:.5rem">刪除評分項目</div><p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">確定要刪除「${c.name}」？此操作無法還原。</p><div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="removeIM()" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--border);background:#fff;font-size:13px;cursor:pointer;font-family:inherit">取消</button><button onclick="doDelCrit('${cid}')" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--danger);background:var(--danger-bg);color:var(--danger);font-size:13px;cursor:pointer;font-family:inherit">刪除</button></div></div>`;
+  document.body.appendChild(m);
+}
+function doDelCrit(cid){settings.criteria=settings.criteria.filter(c=>c.id!==cid);persist();removeIM();renderSettings();}
+function openDelProp(id){
+  const p=props.find(x=>x.id===id);if(!p)return;removeIM();
+  const m=document.createElement('div');m.className='imodal';
+  m.innerHTML=`<div class="imodal-box" style="max-width:340px"><div style="font-size:15px;font-weight:500;margin-bottom:.5rem">刪除物件</div><p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">確定要刪除「${p.addr||'此物件'}」？</p><div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="removeIM()" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--border);background:#fff;font-size:13px;cursor:pointer;font-family:inherit">取消</button><button onclick="doDelProp('${id}')" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--danger);background:var(--danger-bg);color:var(--danger);font-size:13px;cursor:pointer;font-family:inherit">刪除</button></div></div>`;
+  document.body.appendChild(m);
+}
+function doDelProp(id){
+  props=props.filter(p=>p.id!==id);cmpSel=cmpSel.filter(x=>x!==id);persist();removeIM();renderList();renderRanking();renderCmpSel();
+  cloudDelete(id); // cloud sync
+}
+function openResetConfirm(){removeIM();
+  const m=document.createElement('div');m.className='imodal';
+  m.innerHTML=`<div class="imodal-box" style="max-width:340px"><div style="font-size:15px;font-weight:500;margin-bottom:.5rem">恢復預設設定</div><p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">確定恢復所有評分設定為預設值？不影響已儲存物件。</p><div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="removeIM()" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--border);background:#fff;font-size:13px;cursor:pointer;font-family:inherit">取消</button><button onclick="doReset()" style="padding:7px 16px;border-radius:var(--r);border:.5px solid var(--danger);background:var(--danger-bg);color:var(--danger);font-size:13px;cursor:pointer;font-family:inherit">恢復</button></div></div>`;
+  document.body.appendChild(m);
+}
+function doReset(){settings=defSettings();persist();removeIM();renderSettings();}
+
+// ═══════════════ PHOTO CATS ═══════════════
+function renderPhotoCatEditor(){
+  const div=document.getElementById('pc-editor');if(!div)return;
+  div.innerHTML=settings.photoCats.map((cat,i)=>`
+    <div class="pc-row">
+      ${i>0?`<button class="move-up-btn" onclick="movePC(${i})" title="往上移">▲</button>`:'<span style="width:26px;display:inline-block"></span>'}
+      <input type="text" value="${cat}" onchange="updPC(${i},this.value)" placeholder="類別名稱">
+      <button class="btn btn-sm btn-ic btn-d" onclick="rmPC(${i})">✕</button>
+    </div>`).join('');
+}
+function movePC(i){
+  if(i<=0)return;
+  [settings.photoCats[i-1],settings.photoCats[i]]=[settings.photoCats[i],settings.photoCats[i-1]];
+  persist();renderPhotoCatEditor();
+}
+function updPC(i,v){settings.photoCats[i]=v;persist();}
+function rmPC(i){if(settings.photoCats.length<=1){return;}settings.photoCats.splice(i,1);persist();renderPhotoCatEditor();}
+function addPhotoCat(){settings.photoCats.push('新類別');persist();renderPhotoCatEditor();}
+
+// ═══════════════ FORM PHOTOS ═══════════════
+function triggerPhoto(i){curPhotoCat=i;document.getElementById('file-in').click();}
+function handlePhoto(e){
+  const g=document.getElementById('pg-'+curPhotoCat);if(!g)return;
+  Array.from(e.target.files).forEach(f=>{const r=new FileReader();r.onload=ev=>addThumb(g,ev.target.result);r.readAsDataURL(f);});
+  e.target.value='';
+}
+function addThumb(grid,src){
+  const w=document.createElement('div');w.className='pwrap';
+  const img=document.createElement('img');img.src=src;img.className='pthumb';
+  const del=document.createElement('button');del.className='pdel';del.innerHTML='✕';del.title='刪除';del.onclick=()=>w.remove();
+  w.appendChild(img);w.appendChild(del);grid.appendChild(w);
+}
+
+// ═══════════════ PAGE / SECTION SWITCH ═══════════════
+function switchSec(name){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.stab').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-'+name)?.classList.add('active');
+  document.querySelectorAll('.stab').forEach(s=>{if(s.getAttribute('onclick')?.includes("'"+name+"'"))s.classList.add('active');});
+}
+function switchPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nt').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name)?.classList.add('active');
+  document.querySelectorAll('.nt').forEach(t=>{if(t.getAttribute('onclick')?.includes("'"+name+"'"))t.classList.add('active');});
+  if(name==='ranking')renderRanking();
+  if(name==='compare')renderCmpSel();
+  if(name==='settings')renderSettings();
+}
+
+// ═══════════════ SEED TEST DATA ═══════════════
+function seedIfEmpty(){
+  if(props.length > 0) return;
+  const s = defSettings(); // use default scoring to calculate
+
+  // helper: score a prop object against default settings
+  function scoreP(p){
+    let sc=0, w=[];
+    const mMin = p.metroMin||0;
+    if(mMin<=8) sc+=5; else if(mMin<=15) sc+=3;
+    const lc = s.criteria.find(c=>c.id==='layout');
+    if(lc){
+      if(p.rooms>=2) sc+=lc.rooms2??5; else if(p.rooms===1) sc+=lc.rooms1??3;
+      if(p.living>=1) sc+=lc.living1??3;
+      if(p.bath===0){ sc+=lc.bath0??-99; } else sc+=lc.bath1??3;
+      if(p.balcony>=1) sc+=lc.balcony1??3;
+    }
+    // floor option
+    const floorC = s.criteria.find(c=>c.id==='floor');
+    if(floorC && p.opts?.floor!=null) { const o=floorC.options[p.opts.floor]; if(o) sc+=o.s??0; }
+    // elevator sub
+    if(p.toggles?.elevator==='1') sc+=2;
+    // rent tiers
+    const rc=s.criteria.find(c=>c.id==='rent');
+    if(rc && p.rent>0){const st=[...rc.tiers].sort((a,b)=>a.max-b.max);const m=st.find(t=>p.rent<=t.max);sc+=m?m.s:(rc.overScore??0);}
+    // electric
+    const ec=s.criteria.find(c=>c.id==='electric');
+    if(ec && p.opts?.electric!=null){const o=ec.options[p.opts.electric];if(o)sc+=o.s??0;}
+    // self-scores
+    ['waterScore','repairScore','moldScore','toiletVentScore','outletScore','storageScore','wpScore','wallScore','lightScore','noiseAm','noisePm','corridorScore'].forEach(k=>{ sc+=parseInt(p[k])||0; });
+    // washer
+    const wc=s.criteria.find(c=>c.id==='washer');
+    if(wc && p.opts?.washer!=null){const o=wc.options[p.opts.washer];if(o&&o.s!==null)sc+=o.s??0;}
+    // ac
+    ['ac-noise','ac-smell'].forEach(id=>{const c2=s.criteria.find(c=>c.id===id);if(c2&&p.opts?.[id]!=null){const o=c2.options[p.opts[id]];if(o)sc+=o.s??0;}});
+    // speed
+    const spd=p.speed||0;
+    const sc2=s.criteria.find(c=>c.id==='speed');
+    if(sc2){let sp=0;if(spd>=150)sp=sc2.options[3]?.s??5;else if(spd>=130)sp=sc2.options[2]?.s??4;else if(spd>=100)sp=sc2.options[1]?.s??3;else if(spd>=60)sp=sc2.options[0]?.s??2;sc+=sp;}
+    // safety
+    ['lock','cctv','trash','parcel','parking'].forEach(id=>{const c2=s.criteria.find(c=>c.id===id);if(c2&&p.opts?.[id]!=null){const o=c2.options[p.opts[id]];if(o)sc+=o.s??0;}});
+    // change-lock sub
+    if(p.toggles?.['change-lock']==='1') sc+=2;
+    return sc;
+  }
+
+  const p1 = {
+    id:'seed-1', date:'2026-05-01',
+    addr:'台北市大安區和平東路二段 XX 號 3F',
+    metroName:'科技大樓站', metroMin:6,
+    rooms:2, living:1, bath:1, balcony:1,
+    floor:3, totalFloor:7,
+    rent:25000, deposit:50000, mgmtFee:null,
+    equipment:['冷氣','熱水器','床','衣櫃','網路'],
+    excluded:['水費'],
+    kwh:4.2, waterScore:4, earlyExit:1, repairScore:4, repairNote:'房東負責主要設備維修，耗材自理',
+    moldScore:4, moldNote:'輕微老舊氣味', toiletVentScore:5, toiletVentNote:'有對外窗採光佳',
+    outletRoom:4, outletLiving:3, outletBath:1, outletScore:4, outletNote:'插座充足',
+    storageCount:2, storageScore:4, storageNote:'有兩個大衣櫃',
+    wpScore:4, wpNote:'水壓正常', acBrand:'日立',
+    wallScore:4, wallNote:'實心牆，隔音不錯',
+    lightScore:5, lightNote:'南向採光充足，無西曬',
+    noiseAm:4, noisePm:5,
+    corridorScore:4, corridorNote:'走廊明亮有監視器',
+    trashTime:'', overallNote:'整體條件不錯，交通便利，採光好，房東人好說話。唯租金偏高。',
+    speed:145,
+    opts:{
+      metro:0,       // 0~8分鐘
+      floor:2,       // 3樓 → index 1 (1~2樓=0, 3樓=1, 4樓=2, 5F+=3)  → 3樓=index 1
+      electric:1,    // 每度4元以下
+      water:0,       // 台水帳單
+      repair:0,      // 房東全責
+      washer:0,      // 無提供
+      'ac-noise':2,  // 無
+      'ac-smell':2,  // 無
+      speed:3,       // 130~150 Mbps
+      lock:0,        // 電子鎖
+      cctv:0,        // 有
+      trash:0,       // 集中管理
+      parcel:0,      // 有
+      parking:2,     // 走路8~15分鐘有車位
+    },
+    toggles:{ elevator:'1', rooftop:'0', 'change-lock':'1', summer:'0' },
+    custScores:{}, photos:{}, updatedAt:Date.now()
+  };
+  // fix floor index: 1~2樓=0, 3樓=1, 4樓=2, 5F+=3
+  p1.opts.floor = 1; // 3樓
+  p1.score = scoreP(p1);
+
+  const p2 = {
+    id:'seed-2', date:'2026-05-03',
+    addr:'新北市板橋區文化路一段 XX 號 5F',
+    metroName:'板橋站', metroMin:12,
+    rooms:1, living:1, bath:1, balcony:0,
+    floor:5, totalFloor:12,
+    rent:18000, deposit:36000, mgmtFee:1500,
+    equipment:['冷氣','熱水器','洗衣機','網路','第四台'],
+    excluded:['管理費','水費'],
+    kwh:4.8, waterScore:3, earlyExit:1, repairScore:3, repairNote:'耗材自理，設備老舊問題較多',
+    moldScore:3, moldNote:'廁所略有濕氣', toiletVentScore:3, toiletVentNote:'抽風機但無對外窗',
+    outletRoom:3, outletLiving:2, outletBath:1, outletScore:3, outletNote:'插座尚可，延長線補足',
+    storageCount:1, storageScore:2, storageNote:'只有一個小衣櫃，收納不足',
+    wpScore:3, wpNote:'水壓普通', acBrand:'東元',
+    wallScore:2, wallNote:'空心隔間牆，可聽見鄰居說話',
+    lightScore:3, lightNote:'有窗但北向，採光普通',
+    noiseAm:3, noisePm:2,
+    corridorScore:3, corridorNote:'走廊燈光尚可',
+    trashTime:'', overallNote:'租金便宜且含洗衣機，但隔音差、收納不足，管理費另計。離捷運稍遠。',
+    speed:98,
+    opts:{
+      metro:1,       // 8~15分鐘
+      floor:3,       // 5樓以上
+      electric:2,    // 每度4~5元
+      water:2,       // 定額收費
+      repair:1,      // 耗材自理
+      washer:1,      // 個人專用
+      'ac-noise':1,  // 尚可接受
+      'ac-smell':1,  // 尚可接受
+      speed:1,       // 100~130 Mbps
+      lock:1,        // 傳統鎖
+      cctv:0,        // 有
+      trash:0,       // 集中管理
+      parcel:1,      // 沒有
+      parking:3,     // 走路15分鐘以上
+    },
+    toggles:{ elevator:'1', rooftop:'0', 'change-lock':'0', summer:'0' },
+    custScores:{}, photos:{}, updatedAt:Date.now()
+  };
+  p2.score = scoreP(p2);
+
+  props.push(p1, p2);
+  persist();
+}
+// seedIfEmpty(); // disabled: using cloud data
 
 // ═══════════════ INIT ═══════════════
 document.addEventListener('DOMContentLoaded',()=>{
-  initCloudData(); // 頁面載入時從雲端抓取資料
+  initCloudData(); // 從雲端載入資料（取代 localStorage props）
   document.querySelectorAll('#chips-eq .chip input, #chips-ex .chip input').forEach(cb=>{
     cb.addEventListener('change',function(){this.closest('.chip').classList.toggle('on',this.checked);});
   });
@@ -888,6 +1373,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(delBtn){ openDelProp(delBtn.dataset.del); return; }
   });
 });
+renderList();
 </script>
 </body>
 </html>
