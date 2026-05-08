@@ -1396,7 +1396,11 @@ async function uploadPendingPhotos(catIdx){
   btn.disabled=true;btn.textContent='上傳中…';
   if(status){status.style.display='block';status.style.color='var(--text2)';status.textContent='正在上傳 '+items.length+' 張…';}
 
-  const catName=(settings.photoCats[catIdx]||'photo').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g,'_');
+  const catName=(settings.photoCats[catIdx]||'photo')
+    .replace(/[^a-zA-Z0-9]/g,'_')  // remove ALL non-ASCII including Chinese
+    .replace(/_+/g,'_')             // collapse multiple underscores
+    .replace(/^_|_$/g,'')          // trim leading/trailing
+    .slice(0,20)||'photo';
   let ok=0,fail=0;
 
   for(const w of items){
