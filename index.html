@@ -75,7 +75,7 @@ label{font-size:13px;color:var(--text2);display:block;margin-bottom:4px}
 /* photos */
 .pua{border:1.5px dashed var(--border2);border-radius:var(--r);padding:.85rem;text-align:center;color:var(--text3);font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px}
 .pua:hover{border-color:var(--accent);color:var(--accent)}
-.pgrid{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.pgrid{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px}
 .pwrap{position:relative;width:82px;height:82px;flex-shrink:0}
 .pthumb{width:100%;height:100%;object-fit:cover;border-radius:8px;border:.5px solid var(--border);display:block}
 .pdel{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:var(--danger);color:#fff;border:2px solid #fff;border-radius:50%;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
@@ -344,7 +344,7 @@ label{font-size:13px;color:var(--text2);display:block;margin-bottom:4px}
     </div>
     <!-- PHOTOS -->
     <div class="section" id="sec-photos">
-      <p class="tmuted mb2" style="font-size:12px">點擊上傳照片；點 ✕ 刪除</p>
+      <p class="tmuted mb2" style="font-size:12px">選取照片後，點「☁️ 上傳照片」才會儲存到雲端</p>
       <div id="photo-cats-form"></div>
     </div>
     <!-- NOTES -->
@@ -712,9 +712,23 @@ function handleWasher(){
 function renderFormPhotoCats(){
   const div=document.getElementById('photo-cats-form');if(!div)return;
   div.innerHTML=settings.photoCats.map((cat,i)=>`
-    <div class="field"><label>${cat}</label>
-      <div class="pua" onclick="triggerPhoto(${i})"><span style="font-size:20px">📷</span><span>點擊上傳照片</span></div>
+    <div style="margin-bottom:1.25rem">
+      <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:6px">${cat}</div>
+      <!-- uploaded cloud photos -->
       <div class="pgrid" id="pg-${i}"></div>
+      <!-- pending local previews -->
+      <div class="pgrid" id="pg-pending-${i}"></div>
+      <!-- add + upload row -->
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="triggerPhoto(${i})" style="flex-shrink:0">
+          📷 選取照片
+        </button>
+        <button id="pg-upload-btn-${i}" class="btn btn-sm hidden" onclick="uploadPendingPhotos(${i})"
+          style="background:var(--accent);color:#fff;border-color:var(--accent);flex-shrink:0">
+          ☁️ 上傳
+        </button>
+        <span id="pg-upload-status-${i}" style="font-size:12px;color:var(--text2);display:none"></span>
+      </div>
     </div>`).join('');
 }
 function updateAllSubLabels(){
@@ -878,7 +892,13 @@ function loadForm(p){
   if(p.opts)Object.keys(p.opts).forEach(cid=>setOpt(cid,p.opts[cid]));
   const wo=getSelOpt('washer');const ws=document.getElementById('washer-self');if(ws)ws.classList.toggle('hidden',!(wo&&wo.l==='個人專用'));
   settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el&&p.custScores?.[c.id]!=null)el.value=p.custScores[c.id];});
-  if(p.photos)Object.keys(p.photos).forEach(ci=>{const g=document.getElementById('pg-'+ci);if(g)(p.photos[ci]||[]).forEach(src=>addThumb(g,src));});
+  if(p.photos)Object.keys(p.photos).forEach(ci=>{
+    const g=document.getElementById('pg-'+ci);if(!g)return;
+    (p.photos[ci]||[]).forEach(item=>{
+      if(typeof item==='string') addThumb(g,item,null);
+      else if(item?.src) addThumb(g,item.src,item.filename||null);
+    });
+  });
   updateAllSubLabels();
   calcScore();
 }
@@ -891,7 +911,15 @@ function saveProp(){
   const toggles={};
   document.querySelectorAll('input.tv').forEach(el=>{const id=el.id.replace('f-','');toggles[id]=el.value;});
   const custScores={};settings.criteria.filter(c=>c.custom&&c.type==='score').forEach(c=>{const el=document.getElementById('f-cust-'+c.id);if(el&&el.value!=='')custScores[c.id]=parseInt(el.value);});
-  const photos={};settings.photoCats.forEach((_,i)=>{const g=document.getElementById('pg-'+i);if(g){const srcs=Array.from(g.querySelectorAll('img.pthumb')).map(im=>im.src);if(srcs.length)photos[i]=srcs;}});
+  const photos={};settings.photoCats.forEach((_,i)=>{
+    const g=document.getElementById('pg-'+i);if(!g)return;
+    const items=Array.from(g.querySelectorAll('.pwrap')).map(w=>{
+      const img=w.querySelector('img.pthumb');
+      const lbl=w.querySelector('div[title]');
+      return img?{src:img.src,filename:lbl?.title||null}:null;
+    }).filter(Boolean);
+    if(items.length)photos[i]=items;
+  });
   const score=calcScore();
   const p={id:editId||Date.now().toString(),date:gv('f-date'),addr:gv('f-addr'),metroName:gv('f-metro-name'),metroMin:gn('f-metro-min'),rooms:gn('f-rooms'),living:gn('f-living'),bath:gn('f-bath'),balcony:gn('f-balcony'),ping:gn('f-ping'),floor:gn('f-floor'),totalFloor:gn('f-total-floor'),rent:gn('f-rent'),deposit:gn('f-deposit'),mgmtFee:gn('f-mgmt'),equipment:getChips('chips-eq'),excluded:getChips('chips-ex'),summer:gv('f-summer'),kwh:gn('f-kwh'),earlyExit:gn('f-early-exit'),repairScore:gn('f-repair-score'),repairNote:gv('f-repair-note'),moldScore:gn('f-mold-score'),moldNote:gv('f-mold-note'),toiletVentScore:gn('f-toilet-vent-score'),toiletVentNote:gv('f-toilet-vent-note'),outletRoom:gn('f-outlet-room'),outletLiving:gn('f-outlet-living'),outletBath:gn('f-outlet-bath'),outletScore:gn('f-outlet-score'),outletNote:gv('f-outlet-note'),storageCount:gn('f-storage-count'),storageScore:gn('f-storage-score'),storageNote:gv('f-storage-note'),washerScore:gn('f-washer-score'),washerNote:gv('f-washer-note'),wpScore:gn('f-wp-score'),wpNote:gv('f-wp-note'),acBrand:gv('f-ac-brand'),speed:gn('f-speed'),wallScore:gn('f-wall-score'),wallNote:gv('f-wall-note'),lightScore:gn('f-light-score'),lightNote:gv('f-light-note'),noiseAm:gn('f-noise-am'),noisePm:gn('f-noise-pm'),corridorScore:gn('f-corridor-score'),corridorNote:gv('f-corridor-note'),trashTime:gv('f-trash-time'),overallNote:gv('f-overall-note'),toggles,opts,custScores,photos,score,updatedAt:Date.now()};
   if(editId){const i=props.findIndex(x=>x.id===editId);if(i>=0)props[i]=p;}else props.push(p);
@@ -1324,16 +1352,140 @@ function addPhotoCat(){settings.photoCats.push('新類別');persist();renderPhot
 
 // ═══════════════ FORM PHOTOS ═══════════════
 function triggerPhoto(i){curPhotoCat=i;document.getElementById('file-in').click();}
+
 function handlePhoto(e){
-  const g=document.getElementById('pg-'+curPhotoCat);if(!g)return;
-  Array.from(e.target.files).forEach(f=>{const r=new FileReader();r.onload=ev=>addThumb(g,ev.target.result);r.readAsDataURL(f);});
+  const catIdx=curPhotoCat;
+  const pending=document.getElementById('pg-pending-'+catIdx);if(!pending)return;
+  const btn=document.getElementById('pg-upload-btn-'+catIdx);
+  Array.from(e.target.files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=ev=>{
+      const w=document.createElement('div');
+      w.className='pwrap';
+      w.dataset.file=f.name;w.dataset.type=f.type||'image/jpeg';
+      w.dataset.b64=ev.target.result;
+      const img=document.createElement('img');
+      img.src=ev.target.result;img.className='pthumb';
+      img.style.cssText='cursor:zoom-in;opacity:.7;';
+      img.title='尚未上傳';
+      img.onclick=()=>openLightbox(ev.target.result,'[預覽] '+f.name);
+      const del=document.createElement('button');del.className='pdel';del.innerHTML='✕';
+      del.onclick=()=>{w.remove();if(!pending.children.length&&btn)btn.classList.add('hidden');};
+      // Orange dot indicator for pending
+      const dot=document.createElement('div');
+      dot.style.cssText='position:absolute;bottom:4px;left:4px;width:8px;height:8px;border-radius:50%;background:var(--warning);border:1.5px solid #fff';
+      w.appendChild(img);w.appendChild(del);w.appendChild(dot);
+      pending.appendChild(w);
+      if(btn)btn.classList.remove('hidden');
+    };
+    r.readAsDataURL(f);
+  });
   e.target.value='';
 }
-function addThumb(grid,src){
-  const w=document.createElement('div');w.className='pwrap';
-  const img=document.createElement('img');img.src=src;img.className='pthumb';
+
+async function uploadPendingPhotos(catIdx){
+  const pending=document.getElementById('pg-pending-'+catIdx);
+  const uploaded=document.getElementById('pg-'+catIdx);
+  const btn=document.getElementById('pg-upload-btn-'+catIdx);
+  const status=document.getElementById('pg-upload-status-'+catIdx);
+  if(!pending||!pending.children.length)return;
+
+  const items=Array.from(pending.querySelectorAll('.pwrap'));
+  if(!items.length)return;
+
+  btn.disabled=true;btn.textContent='上傳中…';
+  if(status){status.style.display='block';status.style.color='var(--text2)';status.textContent='正在上傳 '+items.length+' 張…';}
+
+  const catName=(settings.photoCats[catIdx]||'photo').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g,'_');
+  let ok=0,fail=0;
+
+  for(const w of items){
+    const b64=w.dataset.b64;
+    const origName=w.dataset.file||'photo.jpg';
+    const ext=origName.split('.').pop().toLowerCase()||'jpg';
+    const ts=Date.now();
+    const filename=`ruby_rental_note_${catName}_${ts}_${Math.random().toString(36).slice(2,6)}.${ext}`;
+
+    try{
+      // Convert base64 to blob
+      const res=await fetch(b64);
+      const blob=await res.blob();
+
+      // Upload to Supabase Storage
+      const uploadRes=await db.storage.from('rental-photos').upload(filename,blob,{
+        contentType:w.dataset.type||'image/jpeg',
+        upsert:false
+      });
+
+      if(uploadRes.error) throw new Error(uploadRes.error.message);
+
+      // Get public URL
+      const urlRes=db.storage.from('rental-photos').getPublicUrl(filename);
+      const publicUrl=urlRes.data.publicUrl;
+
+      // Add to uploaded grid
+      addThumb(uploaded,publicUrl,filename);
+      w.remove();
+      ok++;
+    }catch(err){
+      console.warn('上傳失敗:',err.message);
+      // Mark as failed
+      const lbl=w.querySelector('div');
+      if(lbl){lbl.style.color='var(--danger)';lbl.textContent='失敗';}
+      fail++;
+    }
+  }
+
+  btn.disabled=false;
+  if(!pending.children.length){
+    btn.classList.add('hidden');btn.textContent='☁️ 上傳照片';
+    if(status)status.textContent='✅ 全部上傳完成！';
+  } else {
+    btn.textContent='☁️ 上傳照片';
+    if(status){status.style.color='var(--danger)';status.textContent=`⚠️ ${fail} 張失敗，請重試`;}
+  }
+  if(ok>0&&status) setTimeout(()=>{status.style.display='none';},3000);
+}
+
+function addThumb(grid,src,filename){
+  const w=document.createElement('div');
+  w.className='pwrap';
+  const img=document.createElement('img');
+  img.src=src;img.className='pthumb';
+  img.style.cursor='zoom-in';
+  img.title=filename||'';
+  img.onclick=()=>openLightbox(src,filename||'');
   const del=document.createElement('button');del.className='pdel';del.innerHTML='✕';del.title='刪除';del.onclick=()=>w.remove();
-  w.appendChild(img);w.appendChild(del);grid.appendChild(w);
+  w.appendChild(img);w.appendChild(del);
+  grid.appendChild(w);
+}
+
+// ── Lightbox ──
+function openLightbox(src,filename){
+  const ov=document.createElement('div');
+  ov.id='lightbox-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const img=document.createElement('img');
+  img.src=src;
+  img.style.cssText='max-width:100%;max-height:80vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);object-fit:contain;cursor:default';
+  const bar=document.createElement('div');
+  bar.style.cssText='display:flex;align-items:center;justify-content:space-between;width:100%;max-width:800px;margin-top:10px;gap:12px';
+  const name=document.createElement('span');
+  name.style.cssText='font-size:12px;color:rgba(255,255,255,.6);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  name.textContent=filename||'';
+  const dl=document.createElement('a');
+  dl.href=src;dl.download=filename||'photo.jpg';
+  dl.style.cssText='padding:5px 14px;background:rgba(255,255,255,.15);color:#fff;border-radius:8px;font-size:13px;text-decoration:none;white-space:nowrap;flex-shrink:0';
+  dl.textContent='⬇ 下載';
+  const cls=document.createElement('button');
+  cls.style.cssText='padding:5px 14px;background:rgba(255,255,255,.15);color:#fff;border-radius:8px;font-size:13px;border:none;cursor:pointer;white-space:nowrap;flex-shrink:0';
+  cls.textContent='✕ 關閉';cls.onclick=()=>ov.remove();
+  bar.appendChild(name);bar.appendChild(dl);bar.appendChild(cls);
+  ov.appendChild(img);ov.appendChild(bar);
+  document.body.appendChild(ov);
+  const esc=e=>{if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}};
+  document.addEventListener('keydown',esc);
 }
 
 // ═══════════════ PAGE / SECTION SWITCH ═══════════════
